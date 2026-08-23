@@ -303,4 +303,4 @@ Projet de recherche académique — validation doctorale en informatique et bioi
 
 ## Contact
 
-Dépôt GitHub : [Saif1005/Zaynb-project](https://github.com/Saif1005/Zaynb-project)
+Dépôt GitHub : [Saif1005/genomie-project](https://github.com/Saif1005/genomie-project)
