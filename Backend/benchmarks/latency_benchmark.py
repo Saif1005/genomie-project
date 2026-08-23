@@ -1,9 +1,6 @@
 ﻿"""
 latency_benchmark.py — Benchmark sequentiel de latence par endpoint.
 
-Usage:
-    python -m benchmarks.latency_benchmark
-    python -m benchmarks.latency_benchmark --iterations 50 --warmup 5
 """
 
 from __future__ import annotations
