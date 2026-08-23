@@ -43,7 +43,7 @@ Le traitement bioinformatique des données NGS repose traditionnellement sur une
 ## Architecture du dépôt
 
 ```
-Zaynb-project/
+Genomie-project/
 ├── Backend/          # API FastAPI, agents, pipeline Parabricks, BioGPT
 └── Frontend/         # Interface Next.js 14 (UI clinique + assistant IA)
 ```
