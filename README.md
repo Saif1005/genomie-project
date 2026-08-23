@@ -1,4 +1,4 @@
-# ZAYNB — Plateforme Génomique Clinique Multi-Agents
+# Plateforme Génomique Clinique Multi-Agents
 
 **Zonal Analysis for Yielding Next-generation Biomarkers**
 
@@ -8,7 +8,7 @@ Plateforme de recherche intégrant bioinformatique haute performance, intelligen
 
 ## Présentation
 
-ZAYNB automatise l'ensemble de la chaîne analytique génomique clinique :
+ automatise l'ensemble de la chaîne analytique génomique clinique :
 
 | Entrée | Pipeline | Sortie |
 |--------|----------|--------|
