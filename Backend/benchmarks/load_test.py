@@ -1,12 +1,6 @@
 ﻿"""
 load_test.py — Test de charge concurrent (workers paralleles).
 
-Simule plusieurs clients simultanes et mesure la degradation de latence
-sous charge. Indispensable pour un benchmark de doctorat.
-
-Usage:
-    python -m benchmarks.load_test
-    python -m benchmarks.load_test --workers 20 --iterations 100
 """
 
 from __future__ import annotations
