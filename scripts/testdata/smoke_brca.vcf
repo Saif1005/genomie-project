@@ -1,0 +1,16 @@
+##fileformat=VCFv4.2
+##source=ZAYNB-smoke-test (VCF SYNTHETIQUE - aucune donnee patient reelle)
+##reference=hg38
+##contig=<ID=chr13,length=114364328>
+##contig=<ID=chr17,length=83257441>
+##contig=<ID=chr1,length=248956422>
+##INFO=<ID=GENE,Number=1,Type=String,Description="Gene symbol">
+##INFO=<ID=CLNSIG,Number=.,Type=String,Description="ClinVar clinical significance">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fraction">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SMOKE001
+chr17	43044295	.	C	T	950.5	PASS	GENE=BRCA1;CLNSIG=Pathogenic	GT:AD:DP:AF	0/1:23,22:45:0.489
+chr13	32340300	.	G	A	812.3	PASS	GENE=BRCA2;CLNSIG=Pathogenic	GT:AD:DP:AF	0/1:20,18:38:0.474
+chr1	1014143	.	C	T	420.0	PASS	GENE=ISG15;CLNSIG=Benign	GT:AD:DP:AF	0/1:15,14:29:0.483

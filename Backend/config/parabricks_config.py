@@ -17,6 +17,8 @@ class ParabricksConfig:
     gpu_count: int = 1
     memory_gb: int = 48
     shm_size: str = "8g"
+    # GPU 16 Go : --low-memory si fq2bam manque de VRAM (n'affecte que l'usage mémoire)
+    low_memory: bool = False
 
     @classmethod
     def from_env(cls) -> "ParabricksConfig":
@@ -30,6 +32,7 @@ class ParabricksConfig:
             gpu_count=int(os.getenv("PARABRICKS_GPU_COUNT", "1")),
             memory_gb=int(os.getenv("PARABRICKS_MEMORY_GB", "48")),
             shm_size=os.getenv("PARABRICKS_SHM_SIZE", "8g"),
+            low_memory=os.getenv("PARABRICKS_LOW_MEMORY", "false").lower() in ("1", "true", "yes"),
         )
 
     def get_docker_command(
@@ -88,6 +91,8 @@ class ParabricksConfig:
         if command == "fq2bam":
             cmd.extend(["--in-fq"] + input_files)
             cmd.extend(["--out-bam", output_file])
+            if self.low_memory:
+                cmd.append("--low-memory")
         elif command == "markdup":
             cmd.extend(["--in-bam"] + input_files)
             cmd.extend(["--out-bam", output_file])

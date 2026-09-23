@@ -333,7 +333,7 @@ def select_pipeline_backend() -> Dict[str, Any]:
         info.update(backend="parabricks", reason="PIPELINE_BACKEND=parabricks")
     elif not gpus:
         info.update(backend="cpu", reason="Aucun GPU NVIDIA détecté")
-    elif max_vram_gb + 0.5 < min_gb:  # tolérance : 16 Go annoncés ≈ 15,x Go visibles
+    elif max_vram_gb + 1.0 < min_gb:  # tolérance : une carte « 16 Go » expose 15,0-15,9 Go (T4 : 15 360 MiB)
         info.update(
             backend="cpu",
             reason=f"VRAM {max_vram_gb:.1f} Go < {min_gb:.0f} Go requis par Parabricks",
