@@ -1,0 +1,23 @@
+# Override GPU — ajouté automatiquement par scripts/start.sh si un GPU NVIDIA est
+# utilisable par Docker (driver + NVIDIA Container Toolkit).
+# Donne le GPU à Ollama (Mistral) et au backend (BioGPT, nvidia-smi pour la détection VRAM).
+# Parabricks est lancé séparément par le backend avec `docker run --gpus all`.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  backend:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

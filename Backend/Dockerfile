@@ -1,4 +1,8 @@
-# Backend Zaynb — FastAPI + BioGPT (CUDA) + orchestrateur LangGraph
+# Backend Zaynb — FastAPI + BioGPT (CUDA ou CPU) + orchestrateur LangGraph
+# Client Docker : lance les conteneurs GATK / Parabricks sur le démon de l'hôte
+# (socket /var/run/docker.sock monté par docker-compose.local.yml).
+FROM docker:27-cli AS dockercli
+
 FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime
 
 WORKDIR /app
@@ -11,7 +15,10 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ curl ca-certificates \
     zlib1g-dev libbz2-dev liblzma-dev libcurl4-openssl-dev \
+    bwa samtools tabix \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 
 COPY requirements.txt requirements-api.txt requirements-llm.txt requirements-langchain.txt ./
 
@@ -29,7 +36,8 @@ COPY src/ ./src/
 COPY config/ ./config/
 COPY data/cancer_genes/ ./data/cancer_genes/
 
-RUN mkdir -p /mnt/data/work /mnt/data/scratch /mnt/data/references /app/models
+RUN mkdir -p /mnt/data/work /mnt/data/scratch /mnt/data/references /app/models \
+    /data/zaynb/reference/hg38 /data/zaynb/patients /data/zaynb/models /data/zaynb/tmp
 
 EXPOSE 8000
 

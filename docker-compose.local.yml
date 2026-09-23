@@ -1,0 +1,80 @@
+# ZAYNB — déploiement sur serveur local (on-premise, accès AnyDesk)
+#
+# Démarrage recommandé : bash scripts/start.sh
+#   (ajoute docker-compose.gpu.yml si un GPU NVIDIA est utilisable par Docker)
+# Manuel : docker compose -f docker-compose.local.yml --env-file Backend/.env up -d --build
+#
+# Sécurité : les ports ne sont publiés que sur BIND_ADDRESS (127.0.0.1 par défaut).
+# Pour ouvrir l'interface au réseau local : BIND_ADDRESS=<IP LAN du serveur> dans Backend/.env.
+
+name: zaynb
+
+services:
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-0}
+    volumes:
+      # Modèles Mistral persistants (voir scripts/pull_models.sh)
+      - ${LOCAL_DATA_ROOT:-/data/zaynb}/models/ollama:/root/.ollama
+    networks: [zaynb]
+    # Pas de port publié : seul le backend parle à Ollama (http://ollama:11434)
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./Backend
+    restart: unless-stopped
+    env_file:
+      - ./Backend/.env
+    environment:
+      DEPLOYMENT_MODE: local
+      LOCAL_DATA_ROOT: ${LOCAL_DATA_ROOT:-/data/zaynb}
+      OLLAMA_HOST: http://ollama:11434
+      HF_HOME: ${LOCAL_DATA_ROOT:-/data/zaynb}/models/huggingface
+      PYTHONPATH: /app
+    volumes:
+      # Même chemin dans le conteneur et sur l'hôte : indispensable car les conteneurs
+      # GATK / Parabricks sont lancés par le démon Docker de l'hôte (docker run -v X:X).
+      - ${LOCAL_DATA_ROOT:-/data/zaynb}:${LOCAL_DATA_ROOT:-/data/zaynb}
+      # ⚠ Donne au backend le contrôle du Docker de l'hôte (équivalent root). Nécessaire
+      #   pour lancer GATK/Parabricks. Ne jamais exposer le backend hors du serveur/LAN.
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks: [zaynb]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  frontend:
+    build:
+      context: ./Frontend
+      args:
+        # Le navigateur appelle /api/v1 sur le port du frontend ; Next.js relaie ici.
+        BACKEND_INTERNAL_URL: http://backend:8000
+        NEXT_PUBLIC_DEPLOYMENT_MODE: local
+        NEXT_PUBLIC_LOCAL_DATA_ROOT: ${LOCAL_DATA_ROOT:-/data/zaynb}
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [zaynb]
+
+networks:
+  zaynb:
+    name: zaynb

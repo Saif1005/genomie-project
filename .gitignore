@@ -2,6 +2,8 @@
 .env
 .env.*
 .env.example
+# Modèle de configuration serveur local (sans secret) — versionné
+!Backend/.env.local.example
 *.pem
 *.key
 
@@ -22,6 +24,8 @@ Frontend/.next/
 *.vcf*
 *.fa
 *.fa.fai
+# VCF synthétique du smoke test (aucune donnée patient)
+!scripts/testdata/*.vcf
 
 # OS / IDE
 .DS_Store
