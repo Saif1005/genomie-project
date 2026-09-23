@@ -11,7 +11,6 @@ import shlex
 
 from config.parabricks_config import parabricks_config
 from src.pipeline.exec_utils import is_local_ec2_instance, execute_command
-from src.aws.ec2_manager import get_ec2_manager
 
 # Try to import CPURunner for fallback, but make it optional
 try:
@@ -50,11 +49,13 @@ class ParabricksRunner:
         self.ssh_user = ssh_user
         self.local_mode = is_local_ec2_instance(instance_id)
         if self.local_mode:
-            logger.info("ParabricksRunner: mode local EC2 (sans SSH)")
+            logger.info("ParabricksRunner: exécution locale (sans SSH)")
             if not self.instance_id:
                 from src.pipeline.exec_utils import get_metadata_instance_id
-                self.instance_id = get_metadata_instance_id()
+                self.instance_id = get_metadata_instance_id() or "local"
         else:
+            from src.aws.ec2_manager import get_ec2_manager  # boto3 : mode aws uniquement
+
             self.ec2_manager = get_ec2_manager()
         self.ssh_client: Optional[paramiko.SSHClient] = None
 

@@ -14,9 +14,10 @@ import re
 import shutil
 
 from config.aws_config import aws_config
+from config.deployment import is_local
 from config.gatk_config import gatk_config
+from config.runtime_config import runtime_config
 from src.pipeline.exec_utils import is_local_ec2_instance, execute_command
-from src.aws.ec2_manager import get_ec2_manager
 
 
 class CPURunnerError(Exception):
@@ -46,12 +47,21 @@ class CPURunner:
         self.ssh_user = ssh_user
         self.ssh_client: Optional[paramiko.SSHClient] = None
         self.local_mode = is_local_ec2_instance(instance_id)
+        # Mode local : répertoire sous LOCAL_DATA_ROOT, monté au même chemin sur l'hôte,
+        # pour que les conteneurs GATK (docker run -v) voient les mêmes fichiers.
+        self.work_dir = (
+            str(runtime_config.work_mount / "cpu_pipeline")
+            if is_local()
+            else "/tmp/genomic_pipeline"
+        )
         if self.local_mode:
-            logger.info("CPURunner: mode local EC2 (sans SSH)")
+            logger.info("CPURunner: exécution locale (sans SSH)")
             if not self.instance_id:
                 from src.pipeline.exec_utils import get_metadata_instance_id
                 self.instance_id = get_metadata_instance_id()
         else:
+            from src.aws.ec2_manager import get_ec2_manager  # boto3 : mode aws uniquement
+
             self.ec2_manager = get_ec2_manager()
 
     def _connect_ssh(self) -> None:
@@ -192,8 +202,9 @@ class CPURunner:
             # Install via apt (most reliable on Ubuntu)
             install_cmd = """
             set -e
-            sudo apt-get update -qq
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y bwa samtools
+            SUDO=$(command -v sudo || true)
+            $SUDO apt-get update -qq
+            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y bwa samtools
             """
 
             exit_code, stdout, stderr = self._execute_remote_command(install_cmd, timeout=600)
@@ -239,6 +250,38 @@ class CPURunner:
                 logger.info("✓ GATK Docker image pulled successfully")
             else:
                 logger.warning("GATK Docker image not available, will try to use system GATK if available")
+
+    @staticmethod
+    def _stage_local(src: str, dest: str) -> bool:
+        """Place un fichier local dans work_dir (lien physique, sinon copie). False si absent."""
+        src_p, dest_p = Path(src), Path(dest)
+        if not src_p.is_file():
+            return False
+        dest_p.parent.mkdir(parents=True, exist_ok=True)
+        if dest_p.exists() or dest_p.is_symlink():
+            dest_p.unlink()
+        try:
+            os.link(src_p, dest_p)
+        except OSError:
+            shutil.copy2(src_p, dest_p)
+        return True
+
+    def _stage_reference(self, reference_genome: str, ref_local: str) -> None:
+        """Référence locale + .fai + .dict dans work_dir (GATK exige reference.dict)."""
+        if not self._stage_local(reference_genome, ref_local):
+            raise CPURunnerError(f"Référence introuvable: {reference_genome}")
+        self._stage_local(f"{reference_genome}.fai", f"{ref_local}.fai")
+        src_dict = str(Path(reference_genome).with_suffix(".dict"))
+        self._stage_local(src_dict, str(Path(ref_local).with_suffix(".dict")))
+
+    def _publish_local(self, local_file: str, output_path: str) -> str:
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(local_file, out)
+        for ext in (".bai", ".tbi"):
+            if Path(f"{local_file}{ext}").exists():
+                shutil.copy2(f"{local_file}{ext}", f"{out}{ext}")
+        return str(out)
 
     def _download_from_s3(self, s3_path: str, local_path: str) -> None:
         """Download file from S3 to local path on EC2 instance."""
@@ -298,7 +341,7 @@ class CPURunner:
         logger.info(f"Reference: {reference_genome}")
 
         # Create work directory
-        work_dir = "/tmp/genomic_pipeline"
+        work_dir = self.work_dir
         self._execute_remote_command(f"mkdir -p {work_dir}")
 
         # Download files from S3 if needed
@@ -424,7 +467,7 @@ class CPURunner:
 
         self._connect_ssh()
         self._install_tools()
-        work_dir = "/tmp/genomic_pipeline"
+        work_dir = self.work_dir
         self._execute_remote_command(f"mkdir -p {work_dir}")
 
         bam_local = f"{work_dir}/input.bam"
@@ -434,9 +477,12 @@ class CPURunner:
         metrics_local = f"{work_dir}/dup_metrics.txt"
         table_local = f"{work_dir}/recal_data.table"
 
-        if not input_bam.startswith("s3://"):
-            raise CPURunnerError("input_bam doit être une URI S3")
-        self._download_from_s3(input_bam, bam_local)
+        if input_bam.startswith("s3://"):
+            self._download_from_s3(input_bam, bam_local)
+        elif self.local_mode and self._stage_local(input_bam, bam_local):
+            pass
+        else:
+            raise CPURunnerError(f"input_bam introuvable: {input_bam}")
         self._execute_remote_command(f"rm -f {bam_local}.bai")
         self._execute_remote_command(f"samtools index {bam_local}")
 
@@ -445,6 +491,10 @@ class CPURunner:
             try:
                 self._download_from_s3(f"{reference_genome}.fai", f"{ref_local}.fai")
             except Exception:
+                self._execute_remote_command(f"samtools faidx {ref_local}")
+        elif self.local_mode:
+            self._stage_reference(reference_genome, ref_local)
+            if not Path(f"{ref_local}.fai").exists():
                 self._execute_remote_command(f"samtools faidx {ref_local}")
         else:
             raise CPURunnerError("reference_genome doit être une URI S3")
@@ -470,6 +520,12 @@ class CPURunner:
             known_local = f"{work_dir}/known_sites.vcf.gz"
             mills_local = f"{work_dir}/mills.vcf.gz"
             for s3_uri, local in ((known, known_local), (mills, mills_local)):
+                if not s3_uri.startswith("s3://"):
+                    if self._stage_local(s3_uri, local):
+                        self._stage_local(f"{s3_uri}.tbi", f"{local}.tbi")
+                    else:
+                        logger.warning(f"Sites connus indisponibles ({s3_uri}) — BQSR sans ce fichier")
+                    continue
                 try:
                     self._download_from_s3(s3_uri, local)
                 except Exception as e:
@@ -499,9 +555,12 @@ class CPURunner:
             current_bam = recal_local
             self._execute_remote_command(f"samtools index {current_bam}")
 
-        if not output_bam.startswith("s3://"):
+        if output_bam.startswith("s3://"):
+            self._upload_to_s3(current_bam, output_bam)
+        elif self.local_mode:
+            output_bam = self._publish_local(current_bam, output_bam)
+        else:
             raise CPURunnerError("output_bam doit être une URI S3")
-        self._upload_to_s3(current_bam, output_bam)
         logger.info(f"Prétraitement GATK terminé: {output_bam}")
         return output_bam
 
@@ -531,7 +590,7 @@ class CPURunner:
         logger.info(f"Reference: {reference_genome}")
 
         # Create work directory
-        work_dir = "/tmp/genomic_pipeline"
+        work_dir = self.work_dir
         self._execute_remote_command(f"mkdir -p {work_dir}")
 
         # Download files from S3
@@ -546,8 +605,10 @@ class CPURunner:
             # Remove any existing BAM index so we always recreate it: a stale .bai
             # (e.g. from S3) can be older than the BAM and cause "Invalid GZIP header".
             self._execute_remote_command(f"rm -f {bam_index_local}")
+        elif self.local_mode and self._stage_local(input_bam, bam_local):
+            self._execute_remote_command(f"rm -f {bam_index_local}")
         else:
-            raise CPURunnerError("Local BAM files not supported, use S3 URIs")
+            raise CPURunnerError(f"BAM introuvable: {input_bam}")
 
         if reference_genome.startswith("s3://"):
             self._download_from_s3(reference_genome, ref_local)
@@ -556,6 +617,8 @@ class CPURunner:
                 self._download_from_s3(f"{reference_genome}.fai", ref_index_local)
             except:
                 logger.info("Reference index not found, will be created")
+        elif self.local_mode:
+            self._stage_reference(reference_genome, ref_local)
         else:
             raise CPURunnerError("Local reference genome not supported, use S3 URI")
 
@@ -598,9 +661,11 @@ class CPURunner:
         if exit_code != 0:
             raise CPURunnerError(f"GATK HaplotypeCaller failed: {stderr}")
 
-        # Upload to S3
+        # Upload to S3 (ou copie vers patients/<ID>/output en mode local)
         if output_vcf.startswith("s3://"):
             self._upload_to_s3(vcf_local, output_vcf)
+        elif self.local_mode:
+            output_vcf = self._publish_local(vcf_local, output_vcf)
         else:
             raise CPURunnerError("Local output VCF not supported, use S3 URI")
 

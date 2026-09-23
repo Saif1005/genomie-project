@@ -31,6 +31,14 @@ except ImportError:
     END = None
 
 
+def _require_cuda() -> bool:
+    """CUDA obligatoire ? Défaut : oui sur AWS (T4), non en local (fallback CPU autorisé)."""
+    from config.deployment import is_local
+
+    default = "false" if is_local() else "true"
+    return os.getenv("REQUIRE_CUDA", default).lower() in ("1", "true", "yes")
+
+
 class GraphState(TypedDict, total=False):
     context: Dict[str, Any]
     steps_done: List[str]
@@ -70,7 +78,7 @@ class OrchestratorLangGraph(BaseAgent):
                 "LangGraph requis: pip install -r requirements-langchain.txt"
             )
         self.gpu = get_gpu_manager()
-        if os.getenv("REQUIRE_CUDA", "true").lower() in ("1", "true", "yes"):
+        if _require_cuda():
             assert_cuda_operational()
         self.bridge = MCPToolBridge(config)
         self.tools = build_langchain_tools(self.bridge)
@@ -125,7 +133,7 @@ class OrchestratorLangGraph(BaseAgent):
             logger.info(f"[Router] next={next_tool} reason={parsed.get('reason')}")
         except Exception as e:
             logger.error(f"Router LLM failed: {e}")
-            if os.getenv("REQUIRE_CUDA", "true").lower() in ("1", "true", "yes"):
+            if _require_cuda():
                 raise
             next_tool = remaining[0]
 

@@ -47,6 +47,13 @@ class CancerDetectionInference:
         self.model_path = model_path or llm_config.model_path
         self.base_model = base_model or llm_config.model_name
         self.device = device or llm_config.device
+        # Fallback CPU si CUDA indisponible (serveur sans GPU compatible)
+        if HAS_TORCH and self.device in ("cuda", "auto"):
+            if torch.cuda.is_available():
+                self.device = "cuda"
+            else:
+                logger.warning("CUDA indisponible — BioGPT exécuté sur CPU (plus lent)")
+                self.device = "cpu"
 
         self.model = None
         self.tokenizer = None

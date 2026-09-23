@@ -7,12 +7,12 @@ from typing import Dict, Any, Optional
 
 from src.agents.base_agent import BaseAgent, AgentResult, AgentStatus
 from src.pipeline.parabricks_runner import ParabricksRunner, ParabricksRunnerError
-from config.aws_config import aws_config
+from config.deployment import is_local
 from config.gatk_config import gatk_config
 from config.runtime_config import runtime_config
 from src.schemas.pipeline import PipelineContext
-from src.utils.gpu_manager import get_gpu_manager, GPUPhase
-from src.aws.s3_manager import S3Manager, S3ManagerError
+from src.storage import StorageError, get_storage
+from src.utils.gpu_manager import get_gpu_manager, GPUPhase, select_pipeline_backend
 
 
 class ParabricksAgent(BaseAgent):
@@ -27,6 +27,7 @@ class ParabricksAgent(BaseAgent):
         super().__init__("Parabricks", config)
         self.runner: Optional[ParabricksRunner] = None
         self.gpu = get_gpu_manager()
+        self.storage = get_storage()
         self._ensure_runtime_mounts()
 
     def _ensure_runtime_mounts(self) -> None:
@@ -59,6 +60,10 @@ class ParabricksAgent(BaseAgent):
         return True
 
     def _patient_scratch(self, patient_id: str) -> Path:
+        # Mode local : écriture directe dans patients/<ID>/output (évite de copier les BAM)
+        local_out = self.storage.local_patient_dir(patient_id, "output")
+        if local_out is not None:
+            return local_out
         scratch = runtime_config.scratch_mount / patient_id
         scratch.mkdir(parents=True, exist_ok=True)
         return scratch
@@ -68,31 +73,18 @@ class ParabricksAgent(BaseAgent):
         dest.parent.mkdir(parents=True, exist_ok=True)
         if dest.exists() and dest.stat().st_size > 0:
             return str(dest)
+        try:
+            self.logger.info(f"Préparation {uri} → {dest}")
+            return self.storage.fetch(uri, dest)
+        except StorageError as e:
+            raise ParabricksRunnerError(str(e)) from e
 
-        if uri.startswith("s3://"):
-            bucket_key = uri.replace("s3://", "", 1)
-            bucket, _, key = bucket_key.partition("/")
-            s3 = S3Manager(bucket_name=bucket)
-            if not s3.file_exists(key, bucket_name=bucket):
-                raise ParabricksRunnerError(f"Fichier S3 introuvable: {uri}")
-            self.logger.info(f"Téléchargement {uri} → {dest}")
-            s3.download_file(key, str(dest), bucket_name=bucket, show_progress=False)
-            return str(dest)
-
-        local = Path(uri)
-        if local.exists():
-            return str(local.resolve())
-        raise ParabricksRunnerError(f"Fichier introuvable: {uri}")
-
-    def _upload_to_s3(self, local_path: str, s3_uri: str) -> str:
-        if not Path(local_path).exists():
-            return s3_uri
-        bucket_key = s3_uri.replace("s3://", "", 1)
-        bucket, _, key = bucket_key.partition("/")
-        s3 = S3Manager(bucket_name=bucket)
-        self.logger.info(f"Upload {local_path} → {s3_uri}")
-        s3.upload_file(local_path, key, bucket_name=bucket, show_progress=False)
-        return s3_uri
+    def _upload_to_s3(self, local_path: str, target_uri: str) -> str:
+        """Publie une sortie dans le stockage (S3 en mode aws, no-op si déjà en place en local)."""
+        if not local_path or not Path(local_path).exists():
+            return target_uri
+        self.logger.info(f"Publication {local_path} → {target_uri}")
+        return self.storage.put(local_path, target_uri, area="output")
 
     def _resolve_known_sites(self, known_sites_uri: str) -> str:
         if not known_sites_uri or not gatk_config.enable_bqsr:
@@ -100,31 +92,42 @@ class ParabricksAgent(BaseAgent):
         local = runtime_config.ref_mount / "hg38" / Path(known_sites_uri).name
         if local.exists() and local.stat().st_size > 0:
             return str(local)
-        if known_sites_uri.startswith("s3://"):
-            bucket_key = known_sites_uri.replace("s3://", "", 1)
-            bucket, _, key = bucket_key.partition("/")
-            s3 = S3Manager(bucket_name=bucket)
-            if not s3.file_exists(key, bucket_name=bucket):
-                self.logger.warning(
-                    f"known_sites absent ({known_sites_uri}) — BQSR ignoré"
-                )
-                return ""
+        if not self.storage.exists(known_sites_uri):
+            self.logger.warning(
+                f"known_sites absent ({known_sites_uri}) — BQSR ignoré"
+            )
+            return ""
         return self._ensure_local_file(known_sites_uri, local)
 
+    def _reference_uri(self) -> str:
+        if is_local():
+            return os.getenv(
+                "REFERENCE_GENOME", str(runtime_config.ref_mount / "hg38" / "hg38.fa")
+            )
+        from config.aws_config import aws_config
+
+        return aws_config.reference_genome_s3
+
+    def _output_uri(self, patient_id: str, filename: str) -> str:
+        key = self.storage.key_for(patient_id, "output", filename)
+        if is_local():
+            return key
+        from config.aws_config import aws_config
+
+        return f"s3://{aws_config.s3_output_bucket}/{key}"
+
     def _paths(self, patient_id: str) -> Dict[str, str]:
-        bucket = aws_config.s3_output_bucket
         scratch = self._patient_scratch(patient_id)
-        s3_base = f"s3://{bucket}/patients/{patient_id}"
         return {
             "bam_raw": str(scratch / "aligned.raw.bam"),
             "bam_dedup": str(scratch / "aligned.dedup.bam"),
             "bam_recal": str(scratch / "aligned.recal.bam"),
             "vcf": str(scratch / "variants.vcf.gz"),
-            "s3_bam_raw": f"{s3_base}/aligned.raw.bam",
-            "s3_bam_dedup": f"{s3_base}/aligned.dedup.bam",
-            "s3_bam_recal": f"{s3_base}/aligned.recal.bam",
-            "s3_vcf": f"{s3_base}/variants.vcf.gz",
-            "ref": self._resolve_reference_genome(aws_config.reference_genome_s3),
+            "s3_bam_raw": self._output_uri(patient_id, "aligned.raw.bam"),
+            "s3_bam_dedup": self._output_uri(patient_id, "aligned.dedup.bam"),
+            "s3_bam_recal": self._output_uri(patient_id, "aligned.recal.bam"),
+            "s3_vcf": self._output_uri(patient_id, "variants.vcf.gz"),
+            "ref": self._resolve_reference_genome(self._reference_uri()),
             "known_sites": self._resolve_known_sites(gatk_config.known_sites_s3),
         }
 
@@ -144,13 +147,12 @@ class ParabricksAgent(BaseAgent):
             p = Path(ref_uri)
             if p.exists():
                 return str(p.resolve())
-            raise ParabricksRunnerError(f"Génome de référence introuvable: {ref_uri}")
+            raise ParabricksRunnerError(
+                f"Génome de référence introuvable: {ref_uri}. "
+                "Exécutez: bash scripts/download_reference.sh"
+            )
 
-        bucket_key = ref_uri.replace("s3://", "", 1)
-        bucket, _, key = bucket_key.partition("/")
-        s3 = S3Manager(bucket_name=bucket)
-
-        if not s3.file_exists(key, bucket_name=bucket):
+        if not self.storage.exists(ref_uri):
             raise ParabricksRunnerError(
                 f"Génome de référence absent sur S3: {ref_uri}. "
                 "Exécutez: bash scripts/deployment/upload_hg38_to_s3.sh"
@@ -159,10 +161,9 @@ class ParabricksAgent(BaseAgent):
         local_fa.parent.mkdir(parents=True, exist_ok=True)
         try:
             self.logger.info(f"Téléchargement référence {ref_uri} → {local_fa}")
-            s3.download_file(key, str(local_fa), bucket_name=bucket, show_progress=False)
-            fai_key = f"{key}.fai"
-            if s3.file_exists(fai_key, bucket_name=bucket):
-                s3.download_file(fai_key, str(local_fai), bucket_name=bucket, show_progress=False)
+            self.storage.fetch(ref_uri, local_fa)
+            if self.storage.exists(f"{ref_uri}.fai"):
+                self.storage.fetch(f"{ref_uri}.fai", local_fai)
             elif not local_fai.exists():
                 subprocess.run(
                     ["samtools", "faidx", str(local_fa)],
@@ -170,7 +171,7 @@ class ParabricksAgent(BaseAgent):
                     capture_output=True,
                     timeout=600,
                 )
-        except (S3ManagerError, subprocess.SubprocessError) as e:
+        except (StorageError, subprocess.SubprocessError) as e:
             raise ParabricksRunnerError(
                 f"Impossible de préparer la référence hg38: {e}"
             ) from e
@@ -254,6 +255,50 @@ class ParabricksAgent(BaseAgent):
             },
         }
 
+    def _run_cpu_pipeline(
+        self,
+        fastq_r1: str,
+        fastq_r2: str,
+        paths: Dict[str, str],
+        reason: str,
+    ) -> Dict[str, str]:
+        """Secours GATK4 CPU (BWA-MEM → MarkDuplicates → BQSR → HaplotypeCaller)."""
+        from src.pipeline.cpu_runner import CPURunner, CPURunnerError
+
+        self.logger.warning(
+            f"⚠ Pipeline GATK4 CPU ({reason}) — durée attendue : plusieurs heures "
+            "(~5 h sur 4 vCPU pour un exome, bien plus pour un génome complet)"
+        )
+        runner = CPURunner()
+        try:
+            bam_raw = runner.run_fq2bam(
+                fastq_r1=fastq_r1,
+                fastq_r2=fastq_r2,
+                output_bam=paths["bam_raw"],
+                reference_genome=paths["ref"],
+            )
+            bam_recal = runner.run_gatk_preprocessing(
+                bam_raw, paths["bam_recal"], paths["ref"]
+            )
+            vcf = runner.run_haplotypecaller(
+                input_bam=bam_recal,
+                output_vcf=paths["vcf"],
+                reference_genome=paths["ref"],
+            )
+        except CPURunnerError as e:
+            raise ParabricksRunnerError(f"Pipeline CPU GATK4: {e}") from e
+        finally:
+            runner.cleanup()
+
+        return {
+            "bam_s3": self._upload_to_s3(bam_raw, paths["s3_bam_raw"]),
+            "bam_recal_s3": self._upload_to_s3(bam_recal, paths["s3_bam_recal"]),
+            "vcf_s3": self._upload_to_s3(vcf, paths["s3_vcf"]),
+            "pipeline_backend": "gatk4-cpu",
+            "pipeline_backend_reason": reason,
+            "gatk_steps": list(self.GATK_STEPS),
+        }
+
     def execute(self, context: Dict[str, Any]) -> AgentResult:
         ctx = PipelineContext.from_agent_dict(context)
         fastq_r1 = ctx.fastq_r1_s3 or ctx.fastq_r1
@@ -276,28 +321,35 @@ class ParabricksAgent(BaseAgent):
             instance_id = instance_id or os.getenv("EC2_INSTANCE_ID")
             ssh_key = ssh_key or os.getenv("SSH_KEY_PATH", "/home/ubuntu/.ssh/saif_pipeline.pem")
 
-        if not instance_id:
+        if not instance_id and not is_local():
             return AgentResult(
                 success=False,
                 status=AgentStatus.FAILED,
                 error="EC2_INSTANCE_ID requis",
             )
 
-        paths = self._paths(ctx.patient_id)
-        scratch = self._patient_scratch(ctx.patient_id)
+        backend = select_pipeline_backend()
+        self.logger.info(
+            f"Moteur pipeline: {backend['backend']} ({backend['reason']})"
+        )
         try:
-            self.logger.info(
-                f"Pipeline GATK Parabricks GPU — scratch local: {scratch}"
-            )
+            paths = self._paths(ctx.patient_id)
+            scratch = self._patient_scratch(ctx.patient_id)
+            self.logger.info(f"Pipeline GATK — répertoire de travail: {scratch}")
             local_r1 = self._ensure_local_file(
                 fastq_r1, scratch / Path(fastq_r1).name
             )
             local_r2 = self._ensure_local_file(
                 fastq_r2, scratch / Path(fastq_r2).name
             )
-            data = self._run_gpu_pipeline(
-                instance_id, ssh_key or "", local_r1, local_r2, paths
-            )
+            if backend["backend"] == "cpu":
+                data = self._run_cpu_pipeline(
+                    local_r1, local_r2, paths, backend["reason"]
+                )
+            else:
+                data = self._run_gpu_pipeline(
+                    instance_id, ssh_key or "", local_r1, local_r2, paths
+                )
             self.logger.info(f"✓ GATK complet — VCF: {data['vcf_s3']}")
             return AgentResult(
                 success=True,
