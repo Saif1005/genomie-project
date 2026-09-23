@@ -11,6 +11,8 @@ from loguru import logger
 from src.llm.ollama_client import OllamaClient
 
 _S3_RE = re.compile(r"s3://[a-z0-9.\-]+/\S+", re.IGNORECASE)
+# Mode local : chemins serveur vers FASTQ/VCF (ex. /data/zaynb/patients/P1/input/R1.fastq.gz)
+_LOCAL_PATH_RE = re.compile(r"(?<![\w:])/[\w.\-/]+\.(?:fastq|fq|vcf)(?:\.gz)?\b", re.IGNORECASE)
 _PATIENT_RE = re.compile(r"\b(PATIENT\d+|[A-Za-z][A-Za-z0-9_\-]{2,31})\b")
 _JOB_RE = re.compile(
     r"\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b",
@@ -109,7 +111,7 @@ class AssistantAgent:
         self, message: str, context: Dict[str, Any]
     ) -> Dict[str, Any]:
         lower = message.lower()
-        s3_uris = _S3_RE.findall(message)
+        s3_uris = _S3_RE.findall(message) + _LOCAL_PATH_RE.findall(message)
         patient = _PATIENT_RE.search(message)
         job = _JOB_RE.search(message)
         patient_id = patient.group(1) if patient else context.get("patient_id")
@@ -203,7 +205,7 @@ class AssistantAgent:
                 "patient_id": "identifiant patient",
                 "s3_uri_r1": "FASTQ R1 (S3 ou fichier attaché)",
                 "s3_uri_r2": "FASTQ R2 (S3 ou fichier attaché)",
-                "vcf_s3": "chemin S3 du VCF",
+                "vcf_s3": "chemin du VCF (S3 ou serveur)",
                 "job_id": "identifiant du job (UUID)",
             }
             need = ", ".join(labels.get(m, m) for m in missing)

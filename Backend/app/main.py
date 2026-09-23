@@ -23,14 +23,19 @@ from pydantic import BaseModel, Field, field_validator
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from config.deployment import deployment_mode, is_local, local_data_root
 from config.logging_config import logging_config
 from src.agents.assistant_agent import AssistantAgent
+from src.storage import get_storage
 from src.report.clinical_report_builder import build_clinical_report
 from src.workflow.graph_builder import run_genomic_pipeline
 
 logging_config.setup_logging()
 
-_S3_URI_RE = re.compile(r"^s3://[a-z0-9.\-]+/.+", re.IGNORECASE)
+
+def _validate_input_uri(v: str) -> str:
+    """URI S3 en mode aws ; chemin sous LOCAL_DATA_ROOT (existant) en mode local."""
+    return get_storage().validate_input_uri(v)
 
 # Un seul pipeline GPU à la fois — jobs en thread séparé (ne bloque pas l'API)
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pipeline")
@@ -45,29 +50,23 @@ class JobStatus(str, Enum):
 
 class AnalyzeVCFRequest(BaseModel):
     patient_id: str = Field(..., min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
-    vcf_s3: str = Field(..., description="URI S3 du VCF GATK")
+    vcf_s3: str = Field(..., description="VCF GATK : URI S3 (mode aws) ou chemin serveur (mode local)")
 
     @field_validator("vcf_s3")
     @classmethod
     def validate_vcf_s3(cls, v: str) -> str:
-        v = v.strip()
-        if not _S3_URI_RE.match(v):
-            raise ValueError(f"URI S3 invalide: {v}")
-        return v
+        return _validate_input_uri(v)
 
 
 class AnalyzeRequest(BaseModel):
     patient_id: str = Field(..., min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
-    s3_uri_r1: str = Field(..., description="URI S3 FASTQ R1")
-    s3_uri_r2: str = Field(..., description="URI S3 FASTQ R2")
+    s3_uri_r1: str = Field(..., description="FASTQ R1 : URI S3 (mode aws) ou chemin serveur (mode local)")
+    s3_uri_r2: str = Field(..., description="FASTQ R2 : URI S3 (mode aws) ou chemin serveur (mode local)")
 
     @field_validator("s3_uri_r1", "s3_uri_r2")
     @classmethod
     def validate_s3_uri(cls, v: str) -> str:
-        v = v.strip()
-        if not _S3_URI_RE.match(v):
-            raise ValueError(f"URI S3 invalide: {v}")
-        return v
+        return _validate_input_uri(v)
 
     @field_validator("s3_uri_r2")
     @classmethod
@@ -212,11 +211,25 @@ app.add_middleware(
 )
 
 
+def _genomic_step_label() -> str:
+    """Libellé affiché dans l'UI — avertit si le pipeline tourne sur CPU."""
+    from src.utils.gpu_manager import select_pipeline_backend
+
+    backend = select_pipeline_backend()
+    if backend["backend"] == "cpu":
+        return (
+            "GATK4 CPU (BWA→MarkDup→BQSR→HaplotypeCaller) — ⚠ sans GPU compatible, "
+            f"durée attendue : plusieurs heures ({backend['reason']})"
+        )
+    return "GATK Parabricks (fq2bam→BQSR→HaplotypeCaller)"
+
+
 def _make_step_callback(job_id: str) -> Callable:
+    genomic_label = _genomic_step_label()
     labels = {
-        "data_manager": "Téléchargement S3",
-        "parabricks": "GATK Parabricks (fq2bam→BQSR→HaplotypeCaller)",
-        "genomic_pipeline": "GATK Parabricks (fq2bam→BQSR→HaplotypeCaller)",
+        "data_manager": "Préparation des données" if is_local() else "Téléchargement S3",
+        "parabricks": genomic_label,
+        "genomic_pipeline": genomic_label,
         "vcf_analysis": "Analyse panel cancer du sein",
         "prediction": "Inférence clinique BioGPT",
         "report": "Génération rapport JSON",
@@ -373,18 +386,20 @@ def _run_upload_then_pipeline(
     path_r1: str,
     path_r2: str,
 ) -> None:
-    """Upload FASTQ locaux vers S3 puis lance le pipeline."""
-    from config.aws_config import aws_config
-    from src.aws.s3_manager import get_s3_manager
-
-    jobs.update(job_id, status=JobStatus.RUNNING, progress_message="Upload FASTQ → S3")
+    """Range les FASTQ uploadés (S3 en mode aws, patients/<ID>/input en local) puis lance le pipeline."""
+    storage = get_storage()
+    jobs.update(
+        job_id,
+        status=JobStatus.RUNNING,
+        progress_message="Enregistrement FASTQ" if is_local() else "Upload FASTQ → S3",
+    )
     try:
-        s3 = get_s3_manager()
-        r1_key = f"patients/{patient_id}/input/{Path(path_r1).name}"
-        r2_key = f"patients/{patient_id}/input/{Path(path_r2).name}"
-        r1_s3 = s3.upload_file(path_r1, r1_key, bucket_name=aws_config.s3_input_bucket)
-        r2_s3 = s3.upload_file(path_r2, r2_key, bucket_name=aws_config.s3_input_bucket)
-        jobs.update(job_id, progress_message="FASTQ uploadés — démarrage pipeline")
+        r1_key = storage.key_for(patient_id, "input", Path(path_r1).name)
+        r2_key = storage.key_for(patient_id, "input", Path(path_r2).name)
+        # move=True en local : évite de dupliquer des FASTQ de plusieurs Go
+        r1_s3 = storage.put(path_r1, r1_key, area="input", move=True)
+        r2_s3 = storage.put(path_r2, r2_key, area="input", move=True)
+        jobs.update(job_id, progress_message="FASTQ enregistrés — démarrage pipeline")
         payload = AnalyzeRequest(
             patient_id=patient_id,
             s3_uri_r1=r1_s3,
@@ -489,7 +504,13 @@ async def analyze_upload(
     if fastq_r1.filename == fastq_r2.filename:
         raise HTTPException(status_code=400, detail="R1 et R2 doivent être des fichiers distincts")
 
-    work_root = Path(os.getenv("RUNTIME_WORK_MOUNT", tempfile.gettempdir())) / "uploads"
+    if is_local():
+        from config.runtime_config import runtime_config
+
+        # Même système de fichiers que patients/ → déplacement instantané
+        work_root = runtime_config.work_mount / "uploads"
+    else:
+        work_root = Path(os.getenv("RUNTIME_WORK_MOUNT", tempfile.gettempdir())) / "uploads"
     work_dir = work_root / pid / str(uuid.uuid4())
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -511,7 +532,11 @@ async def analyze_upload(
         job_id=job_id,
         status=JobStatus.QUEUED,
         patient_id=pid,
-        message="FASTQ reçus — upload S3 et pipeline en cours",
+        message=(
+            "FASTQ reçus — enregistrement local et pipeline en cours"
+            if is_local()
+            else "FASTQ reçus — upload S3 et pipeline en cours"
+        ),
     )
 
 
@@ -571,9 +596,17 @@ async def get_job_clinical_report(job_id: str) -> Dict[str, Any]:
 
 @app.get("/health")
 async def health() -> Dict[str, Any]:
+    from src.utils.gpu_manager import select_pipeline_backend
+
+    backend = select_pipeline_backend()
     return {
         "status": "ok",
         "service": "zaynb-genomic-backend",
         "orchestrator": _orchestrator_mode_label() if _use_orchestrator() else "direct",
         "use_orchestrator": _use_orchestrator(),
+        "deployment_mode": deployment_mode(),
+        "data_root": str(local_data_root()) if is_local() else None,
+        "pipeline_backend": backend["backend"],
+        "pipeline_backend_reason": backend["reason"],
+        "gpus": backend["gpus"],
     }
