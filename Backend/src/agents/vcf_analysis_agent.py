@@ -12,8 +12,9 @@ from src.report.clinical_report_builder import (
     variant_dict_to_finding,
     _panel_symbols_from_db,
 )
-from src.aws.s3_manager import get_s3_manager
-from config.aws_config import aws_config
+from src.storage import get_storage
+from config.deployment import is_local
+from config.runtime_config import runtime_config
 
 
 class BreastCancerAnalysisResult(BaseModel):
@@ -57,7 +58,7 @@ class VCFAnalysisAgent(BaseAgent):
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__("VCFAnalysis", config)
-        self.s3_manager = get_s3_manager()
+        self.storage = get_storage()
 
     def validate_input(self, context: Dict[str, Any]) -> bool:
         if "vcf_s3" not in context:
@@ -67,30 +68,24 @@ class VCFAnalysisAgent(BaseAgent):
 
     def execute(self, context: Dict[str, Any]) -> AgentResult:
         patient_id = context.get("patient_id")
-        vcf_s3 = _normalize_s3_path(
-            context.get("vcf_s3"), aws_config.s3_output_bucket
-        )
+        vcf_s3 = context.get("vcf_s3")
+        work_dir = Path("./work") / str(patient_id)
+        if is_local():
+            work_dir = runtime_config.work_mount / str(patient_id)
+        else:
+            from config.aws_config import aws_config
+
+            vcf_s3 = _normalize_s3_path(vcf_s3, aws_config.s3_output_bucket)
 
         try:
-            self.logger.info(f"Downloading VCF from {vcf_s3}...")
-            s3_path = vcf_s3.replace("s3://", "")
-            parts = s3_path.split("/", 1)
-            bucket = parts[0]
-            key = parts[1] if len(parts) > 1 else ""
-            vcf_local = f"./work/{patient_id}/{Path(key).name if key else 'variants.vcf'}"
-            if not vcf_local.endswith((".vcf", ".vcf.gz")):
-                vcf_local = f"./work/{patient_id}/variants.vcf"
-            Path(vcf_local).parent.mkdir(parents=True, exist_ok=True)
-            if Path(vcf_local).exists():
-                Path(vcf_local).unlink()
-
-            self.s3_manager.download_file(
-                s3_key=key,
-                local_path=vcf_local,
-                bucket_name=bucket,
-            )
+            self.logger.info(f"Récupération VCF depuis {vcf_s3}...")
+            name = Path(vcf_s3.replace("s3://", "", 1).partition("/")[2] or vcf_s3).name
+            vcf_dest = work_dir / (name or "variants.vcf")
+            if not str(vcf_dest).endswith((".vcf", ".vcf.gz")):
+                vcf_dest = work_dir / "variants.vcf"
+            vcf_local = self.storage.fetch(vcf_s3, vcf_dest)
             vcf_size = Path(vcf_local).stat().st_size
-            self.logger.info(f"✓ VCF downloaded: {vcf_local} ({vcf_size} bytes)")
+            self.logger.info(f"✓ VCF disponible: {vcf_local} ({vcf_size} bytes)")
 
             vcf_parser = VCFParser(
                 vcf_local,
@@ -132,7 +127,8 @@ class VCFAnalysisAgent(BaseAgent):
                 analysis_result.identified_pathogenic_genes
             )
 
-            metrics_json_path = f"./work/{patient_id}/vcf_metrics.json"
+            work_dir.mkdir(parents=True, exist_ok=True)
+            metrics_json_path = str(work_dir / "vcf_metrics.json")
             vcf_metrics_payload = vcf_parser.export_metrics_json(
                 variants=variants,
                 coverage=None,

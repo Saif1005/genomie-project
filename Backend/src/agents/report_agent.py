@@ -7,18 +7,17 @@ import json
 from loguru import logger
 
 from src.agents.base_agent import BaseAgent, AgentResult, AgentStatus
-from src.aws.s3_manager import get_s3_manager
-from config.aws_config import aws_config
+from src.storage import get_storage
 from config.reporting_config import reporting_config
 from src.report.clinical_report_builder import build_clinical_report
 
 
 class ReportGeneratorAgent(BaseAgent):
-    """Génère le rapport clinique JSON pour l'API et le stockage S3."""
+    """Génère le rapport clinique JSON pour l'API et le stockage (S3 ou local)."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__("ReportGenerator", config)
-        self.s3_manager = get_s3_manager()
+        self.storage = get_storage()
 
     def validate_input(self, context: Dict[str, Any]) -> bool:
         return True
@@ -37,14 +36,12 @@ class ReportGeneratorAgent(BaseAgent):
             report_dict = clinical_report.to_api_dict()
 
             report_path = self._save_json_report(report_dict, patient_id)
-            s3_key = (
-                f"reports/{patient_id}/"
-                f"{clinical_report.report_id}.json"
-            )
-            report_s3 = self.s3_manager.upload_file(
+            report_s3 = self.storage.put(
                 report_path,
-                s3_key,
-                bucket_name=aws_config.s3_output_bucket,
+                self.storage.key_for(
+                    patient_id, "report", f"{clinical_report.report_id}.json"
+                ),
+                area="output",
             )
             self.logger.info(f"✓ Rapport clinique JSON: {report_s3}")
 

@@ -9,8 +9,6 @@ import paramiko
 
 from config.llm_config import llm_config
 from config.aws_config import aws_config
-from src.aws.ec2_manager import get_ec2_manager
-from src.aws.s3_manager import get_s3_manager
 
 
 class FineTuningError(Exception):
@@ -42,6 +40,10 @@ class LLMFineTuner:
         self.ssh_key_path = ssh_key_path
         self.ssh_user = ssh_user
         self.model_name = model_name or llm_config.model_name
+        # Imports AWS paresseux : boto3 n'est pas requis au démarrage de l'API en mode local
+        from src.aws.ec2_manager import get_ec2_manager
+        from src.aws.s3_manager import get_s3_manager
+
         self.ec2_manager = get_ec2_manager()
         self.s3_manager = get_s3_manager()
         self.ssh_client: Optional[paramiko.SSHClient] = None
