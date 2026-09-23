@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { IS_LOCAL } from '@/lib/deployment';
 import AnalysisForm from '@/components/analysis/AnalysisForm';
 import ExecutionMonitor from '@/components/analysis/ExecutionMonitor';
 import FastqUploadForm from '@/components/analysis/FastqUploadForm';
@@ -49,7 +50,7 @@ export default function ClinicalWorkspace() {
           Plateforme génomique Zaynb
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-          Attachez vos FASTQ, parlez à l&apos;assistant en langage naturel, ou saisissez des URIs S3.
+          Attachez vos FASTQ, parlez à l&apos;assistant en langage naturel, ou saisissez des {IS_LOCAL ? 'chemins sur le serveur' : 'URIs S3'}.
           L&apos;orchestrateur enchaîne Parabricks GATK, analyse VCF et inférence BioGPT.
         </p>
       </section>
@@ -78,7 +79,7 @@ export default function ClinicalWorkspace() {
                 active={inputTab === 's3'}
                 onClick={() => setInputTab('s3')}
               >
-                Chemins S3
+                {IS_LOCAL ? 'Chemins serveur' : 'Chemins S3'}
               </TabButton>
             </div>
 

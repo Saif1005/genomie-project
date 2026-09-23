@@ -3,7 +3,13 @@
 import { Loader2, Play, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { startAnalysis, validateAnalyzeForm } from '@/lib/api';
+import { INPUT_LOCATION_LABEL, IS_LOCAL, LOCAL_DATA_ROOT } from '@/lib/deployment';
 import type { AnalyzeRequest } from '@/types/api';
+
+const fastqPlaceholder = (read: 'R1' | 'R2') =>
+  IS_LOCAL
+    ? `${LOCAL_DATA_ROOT}/patients/PATIENT001/input/sample_${read}.fastq.gz`
+    : `s3://bucket/patient/sample_${read}.fastq.gz`;
 
 interface AnalysisFormProps {
   onJobStarted: (jobId: string, patientId: string) => void;
@@ -103,14 +109,14 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
               htmlFor="s3_uri_r1"
               className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300"
             >
-              FASTQ R1 (S3) <span className="text-clinical-high">*</span>
+              FASTQ R1 ({INPUT_LOCATION_LABEL}) <span className="text-clinical-high">*</span>
             </label>
             <input
               id="s3_uri_r1"
-              type="url"
+              type="text"
               value={form.s3_uri_r1}
               onChange={(e) => update('s3_uri_r1', e.target.value)}
-              placeholder="s3://bucket/patient/sample_R1.fastq.gz"
+              placeholder={fastqPlaceholder('R1')}
               disabled={disabled || loading}
               className="w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 font-mono text-xs text-slate-900 outline-none transition focus:border-dna-500 focus:ring-2 focus:ring-dna-500/20 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white sm:text-sm"
             />
@@ -120,14 +126,14 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
               htmlFor="s3_uri_r2"
               className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300"
             >
-              FASTQ R2 (S3) <span className="text-clinical-high">*</span>
+              FASTQ R2 ({INPUT_LOCATION_LABEL}) <span className="text-clinical-high">*</span>
             </label>
             <input
               id="s3_uri_r2"
-              type="url"
+              type="text"
               value={form.s3_uri_r2}
               onChange={(e) => update('s3_uri_r2', e.target.value)}
-              placeholder="s3://bucket/patient/sample_R2.fastq.gz"
+              placeholder={fastqPlaceholder('R2')}
               disabled={disabled || loading}
               className="w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 font-mono text-xs text-slate-900 outline-none transition focus:border-dna-500 focus:ring-2 focus:ring-dna-500/20 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white sm:text-sm"
             />

@@ -1,15 +1,20 @@
 import type { PipelineStep } from '@/types/api';
+import { IS_LOCAL } from '@/lib/deployment';
 
 export const FASTQ_PIPELINE_STEPS: PipelineStep[] = [
   {
     id: 'data_manager',
     label: 'Data Download',
-    description: 'Téléchargement et validation des FASTQ depuis S3',
+    description: IS_LOCAL
+      ? 'Validation des FASTQ sur le serveur'
+      : 'Téléchargement et validation des FASTQ depuis S3',
   },
   {
     id: 'parabricks',
     label: 'Parabricks Alignment',
-    description: 'fq2bam → BQSR → HaplotypeCaller (GATK GPU)',
+    description: IS_LOCAL
+      ? 'fq2bam → BQSR → HaplotypeCaller (GPU ≥ 16 Go, sinon GATK4 CPU)'
+      : 'fq2bam → BQSR → HaplotypeCaller (GATK GPU)',
   },
   {
     id: 'vcf_analysis',

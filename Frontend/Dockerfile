@@ -1,5 +1,8 @@
 # Frontend Zaynb — Next.js (standalone)
-# NEXT_PUBLIC_API_URL : http://IP_EC2:8000 (build-time)
+# Build-time :
+#   BACKEND_INTERNAL_URL        URL du backend vue par Next.js (proxy /api/v1, /health)
+#   NEXT_PUBLIC_DEPLOYMENT_MODE local | aws (libellés et validation des chemins)
+#   NEXT_PUBLIC_API_URL         optionnel — appel direct du backend par le navigateur (ex. AWS)
 
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -12,8 +15,14 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN mkdir -p public
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_API_URL=
+ARG BACKEND_INTERNAL_URL=http://backend:8000
+ARG NEXT_PUBLIC_DEPLOYMENT_MODE=local
+ARG NEXT_PUBLIC_LOCAL_DATA_ROOT=/data/zaynb
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL \
+    NEXT_PUBLIC_DEPLOYMENT_MODE=$NEXT_PUBLIC_DEPLOYMENT_MODE \
+    NEXT_PUBLIC_LOCAL_DATA_ROOT=$NEXT_PUBLIC_LOCAL_DATA_ROOT
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
