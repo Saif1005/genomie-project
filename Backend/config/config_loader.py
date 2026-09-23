@@ -1,6 +1,7 @@
 """Centralized configuration loader for all pipeline configurations."""
 
 from config.aws_config import aws_config
+from config.deployment import is_local
 from config.parabricks_config import parabricks_config
 from config.llm_config import llm_config
 from config.logging_config import logging_config
@@ -37,11 +38,12 @@ class ConfigLoader:
         """
         errors = []
 
-        # Validate AWS config
-        if not self.aws.region:
-            errors.append("AWS_REGION is required")
-        if not self.aws.account_id:
-            errors.append("AWS_ACCOUNT_ID is required")
+        # Validate AWS config (mode aws uniquement)
+        if not is_local():
+            if not self.aws.region:
+                errors.append("AWS_REGION is required")
+            if not self.aws.account_id:
+                errors.append("AWS_ACCOUNT_ID is required")
 
         # Validate Parabricks config
         if not self.parabricks.image:
