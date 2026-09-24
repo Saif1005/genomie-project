@@ -1,25 +1,20 @@
-"""Sélection du backend de stockage selon DEPLOYMENT_MODE."""
+"""Stockage des données patients sur le disque du serveur (LOCAL_DATA_ROOT)."""
 
 from __future__ import annotations
 
 from typing import Dict
 
-from config.deployment import AWS, deployment_mode, local_data_root
+from config.settings import paths
 from src.storage.base import StorageBackend
 
 _instances: Dict[str, StorageBackend] = {}
 
 
 def get_storage() -> StorageBackend:
-    mode = deployment_mode()
-    key = f"{mode}:{local_data_root()}"
+    from src.storage.local import LocalStorage
+
+    root = paths().data_root
+    key = str(root)
     if key not in _instances:
-        if mode == AWS:
-            from src.storage.s3 import S3Storage
-
-            _instances[key] = S3Storage()
-        else:
-            from src.storage.local import LocalStorage
-
-            _instances[key] = LocalStorage(local_data_root())
+        _instances[key] = LocalStorage(root)
     return _instances[key]

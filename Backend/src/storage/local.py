@@ -27,7 +27,7 @@ class LocalStorage(StorageBackend):
             raise StorageError("Chemin vide")
         if uri.startswith("s3://"):
             raise StorageError(
-                f"URI S3 non supportée en DEPLOYMENT_MODE=local : {uri}. "
+                f"URI S3 non supportée (stockage local uniquement) : {uri}. "
                 f"Déposez le fichier sous {self.root}/patients/<ID>/input/"
             )
         if uri.startswith("file://"):

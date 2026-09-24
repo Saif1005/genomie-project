@@ -1,4 +1,4 @@
-"""Gestionnaire VRAM GPU avec mutex d'exclusion (VRAM détectée via nvidia-smi, T4 16 Go sur AWS)."""
+"""Gestionnaire VRAM GPU avec mutex d'exclusion (VRAM réelle détectée via nvidia-smi)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 import threading
-import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from enum import Enum
@@ -132,8 +131,6 @@ class GPUManager:
         agent: str,
         phase: str,
         duration_s: Optional[float] = None,
-        s3_inputs: Optional[List[str]] = None,
-        s3_output: Optional[str] = None,
         **extra: Any,
     ) -> Dict[str, Any]:
         """Log structuré JSON à chaque transition d'agent."""
@@ -152,10 +149,6 @@ class GPUManager:
                 "total": vram.get("total_mb"),
             },
         }
-        if s3_inputs:
-            entry["s3_inputs"] = s3_inputs
-        if s3_output:
-            entry["s3_output"] = s3_output
         if extra:
             entry.update(extra)
         logger.info(json.dumps(entry, default=str))
@@ -310,15 +303,15 @@ def gpu_inventory(refresh: bool = False) -> List[Dict[str, Any]]:
 
 def select_pipeline_backend() -> Dict[str, Any]:
     """
-    Choisit le moteur FASTQ→VCF selon la VRAM réelle (et non celle supposée d'un T4).
+    Choisit le moteur FASTQ→VCF selon la VRAM réelle du serveur.
 
-    PIPELINE_BACKEND=auto (défaut en local) | parabricks | cpu
+    PIPELINE_BACKEND=auto (défaut) | parabricks | cpu
     PARABRICKS_MIN_VRAM_GB : VRAM minimale par GPU exigée par Parabricks (16 Go).
     """
-    from config.deployment import is_local
+    from config.settings import parabricks
 
-    requested = os.getenv("PIPELINE_BACKEND", "auto" if is_local() else "parabricks").lower()
-    min_gb = float(os.getenv("PARABRICKS_MIN_VRAM_GB", "16"))
+    requested = os.getenv("PIPELINE_BACKEND", "auto").lower()
+    min_gb = parabricks().min_vram_gb
     gpus = gpu_inventory()
     max_vram_gb = max((g["vram_mb"] for g in gpus), default=0.0) / 1024
     info: Dict[str, Any] = {
@@ -333,7 +326,7 @@ def select_pipeline_backend() -> Dict[str, Any]:
         info.update(backend="parabricks", reason="PIPELINE_BACKEND=parabricks")
     elif not gpus:
         info.update(backend="cpu", reason="Aucun GPU NVIDIA détecté")
-    elif max_vram_gb + 1.0 < min_gb:  # tolérance : une carte « 16 Go » expose 15,0-15,9 Go (T4 : 15 360 MiB)
+    elif max_vram_gb + 1.0 < min_gb:  # tolérance : une carte « 16 Go » expose 15,0-15,9 Go (ex. 15 360 MiB)
         info.update(
             backend="cpu",
             reason=f"VRAM {max_vram_gb:.1f} Go < {min_gb:.0f} Go requis par Parabricks",

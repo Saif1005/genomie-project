@@ -11,10 +11,9 @@ class StorageError(Exception):
 
 
 class StorageBackend(ABC):
-    """
-    Les agents manipulent des « URIs » opaques :
-    - mode aws   : s3://bucket/key
-    - mode local : chemin absolu sous LOCAL_DATA_ROOT (/data/zaynb/patients/…)
+    """Les agents manipulent des URIs : chemins absolus sous LOCAL_DATA_ROOT (/data/zaynb/patients/…).
+
+    Interface conservée pour isoler les agents du système de fichiers (tests, futur stockage objet).
     """
 
     name: str = "abstract"
@@ -33,7 +32,7 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def fetch(self, uri: str, dest: Path) -> str:
-        """Rend le fichier disponible localement ; retourne le chemin local à lire."""
+        """Retourne le chemin local à lire (le fichier est lu en place)."""
 
     @abstractmethod
     def put(self, local_path: str, key: str, area: str = "output", move: bool = False) -> str:
@@ -44,5 +43,5 @@ class StorageBackend(ABC):
         """Clé de stockage d'un fichier patient. area ∈ {input, output, report}."""
 
     def local_patient_dir(self, patient_id: str, area: str) -> Path | None:
-        """Répertoire local où écrire directement les sorties (None si stockage distant)."""
+        """Répertoire local où écrire directement les sorties."""
         return None
