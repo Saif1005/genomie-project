@@ -8,7 +8,7 @@ import src.utils.gpu_manager as gm
 @pytest.mark.parametrize(
     "vram_mb,expected",
     [
-        (15360, "parabricks"),  # T4 / carte « 16 Go »
+        (15360, "parabricks"),  # carte « 16 Go » (15 360 MiB exposés)
         (16384, "parabricks"),
         (24576, "parabricks"),
         (12288, "cpu"),
@@ -16,7 +16,6 @@ import src.utils.gpu_manager as gm
     ],
 )
 def test_backend_from_vram(monkeypatch, vram_mb, expected):
-    monkeypatch.setenv("DEPLOYMENT_MODE", "local")
     monkeypatch.delenv("PIPELINE_BACKEND", raising=False)
     monkeypatch.setattr(
         gm, "_gpu_inventory_cache", [{"name": "GPU", "vram_mb": float(vram_mb), "compute_cap": None}]
@@ -25,7 +24,6 @@ def test_backend_from_vram(monkeypatch, vram_mb, expected):
 
 
 def test_no_gpu_means_cpu(monkeypatch):
-    monkeypatch.setenv("DEPLOYMENT_MODE", "local")
     monkeypatch.delenv("PIPELINE_BACKEND", raising=False)
     monkeypatch.setattr(gm, "_gpu_inventory_cache", [])
     assert gm.select_pipeline_backend()["backend"] == "cpu"
