@@ -26,6 +26,8 @@ Frontend/.next/
 *.fa.fai
 # VCF synthétique du smoke test (aucune donnée patient)
 !scripts/testdata/*.vcf
+# Fixtures de test synthétiques (aucune donnée patient)
+!Backend/tests/fixtures/*.vcf
 
 # OS / IDE
 .DS_Store

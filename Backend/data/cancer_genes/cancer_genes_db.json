@@ -1,9 +1,63 @@
 {
+  "BRCA1": {
+    "symbol": "BRCA1",
+    "name": "BRCA1 DNA repair associated",
+    "chromosome": "chr17",
+    "start_position": 43044292,
+    "end_position": 43170327,
+    "cancer_types": [
+      "breast",
+      "ovarian"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "high"
+    }
+  },
+  "BRCA2": {
+    "symbol": "BRCA2",
+    "name": "BRCA2 DNA repair associated",
+    "chromosome": "chr13",
+    "start_position": 32315077,
+    "end_position": 32400268,
+    "cancer_types": [
+      "breast",
+      "ovarian",
+      "pancreatic",
+      "prostate"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "high"
+    }
+  },
+  "PALB2": {
+    "symbol": "PALB2",
+    "name": "partner and localizer of BRCA2",
+    "chromosome": "chr16",
+    "start_position": 23603158,
+    "end_position": 23641342,
+    "cancer_types": [
+      "breast",
+      "ovarian",
+      "pancreatic"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "high"
+    }
+  },
   "TP53": {
     "symbol": "TP53",
-    "name": "Tumor protein p53",
+    "name": "tumor protein p53",
     "chromosome": "chr17",
-    "start_position": 7668402,
+    "start_position": 7661779,
     "end_position": 7687550,
     "cancer_types": [
       "breast",
@@ -13,34 +67,226 @@
       "pancreatic"
     ],
     "pathogenicity": "pathogenic",
-    "inheritance": "autosomal_dominant"
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "high"
+    }
   },
-  "BRCA1": {
-    "symbol": "BRCA1",
-    "name": "BRCA1 DNA repair associated",
+  "PTEN": {
+    "symbol": "PTEN",
+    "name": "phosphatase and tensin homolog",
+    "chromosome": "chr10",
+    "start_position": 87863247,
+    "end_position": 87971930,
+    "cancer_types": [
+      "breast",
+      "endometrial",
+      "prostate",
+      "brain"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "high"
+    }
+  },
+  "CDH1": {
+    "symbol": "CDH1",
+    "name": "cadherin 1",
+    "chromosome": "chr16",
+    "start_position": 68737292,
+    "end_position": 68835537,
+    "cancer_types": [
+      "breast",
+      "gastric"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "high"
+    }
+  },
+  "STK11": {
+    "symbol": "STK11",
+    "name": "serine/threonine kinase 11",
+    "chromosome": "chr19",
+    "start_position": 1177558,
+    "end_position": 1228431,
+    "cancer_types": [
+      "breast",
+      "colorectal",
+      "pancreatic",
+      "gastric",
+      "ovarian"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "high"
+    }
+  },
+  "CHEK2": {
+    "symbol": "CHEK2",
+    "name": "checkpoint kinase 2",
+    "chromosome": "chr22",
+    "start_position": 28687742,
+    "end_position": 28741834,
+    "cancer_types": [
+      "breast",
+      "colorectal",
+      "prostate"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "moderate"
+    }
+  },
+  "ATM": {
+    "symbol": "ATM",
+    "name": "ATM serine/threonine kinase",
+    "chromosome": "chr11",
+    "start_position": 108222788,
+    "end_position": 108369102,
+    "cancer_types": [
+      "breast",
+      "pancreatic",
+      "prostate"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "moderate"
+    }
+  },
+  "BARD1": {
+    "symbol": "BARD1",
+    "name": "BRCA1 associated RING domain 1",
+    "chromosome": "chr2",
+    "start_position": 214724705,
+    "end_position": 214809726,
+    "cancer_types": [
+      "breast"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "moderate"
+    }
+  },
+  "RAD51C": {
+    "symbol": "RAD51C",
+    "name": "RAD51 paralog C",
     "chromosome": "chr17",
-    "start_position": 43044295,
-    "end_position": 43125483,
+    "start_position": 58692569,
+    "end_position": 58735611,
     "cancer_types": [
       "breast",
       "ovarian"
     ],
     "pathogenicity": "pathogenic",
-    "inheritance": "autosomal_dominant"
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "moderate"
+    }
   },
-  "BRCA2": {
-    "symbol": "BRCA2",
-    "name": "BRCA2 DNA repair associated",
-    "chromosome": "chr13",
-    "start_position": 32315474,
-    "end_position": 32400266,
+  "RAD51D": {
+    "symbol": "RAD51D",
+    "name": "RAD51 paralog D",
+    "chromosome": "chr17",
+    "start_position": 35092221,
+    "end_position": 35121522,
     "cancer_types": [
       "breast",
-      "ovarian",
-      "pancreatic"
+      "ovarian"
     ],
     "pathogenicity": "pathogenic",
-    "inheritance": "autosomal_dominant"
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "moderate"
+    }
+  },
+  "NF1": {
+    "symbol": "NF1",
+    "name": "neurofibromin 1",
+    "chromosome": "chr17",
+    "start_position": 31094883,
+    "end_position": 31382116,
+    "cancer_types": [
+      "breast",
+      "nervous_system"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "autosomal_dominant",
+    "breast_panel": {
+      "role": "germline",
+      "penetrance": "moderate"
+    }
+  },
+  "PIK3CA": {
+    "symbol": "PIK3CA",
+    "name": "phosphatidylinositol-4,5-bisphosphate 3-kinase catalytic subunit alpha",
+    "chromosome": "chr3",
+    "start_position": 179148114,
+    "end_position": 179240093,
+    "cancer_types": [
+      "breast",
+      "colorectal",
+      "endometrial"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "somatic",
+    "breast_panel": {
+      "role": "somatic",
+      "penetrance": null
+    }
+  },
+  "ERBB2": {
+    "symbol": "ERBB2",
+    "name": "erb-b2 receptor tyrosine kinase 2",
+    "chromosome": "chr17",
+    "start_position": 39687914,
+    "end_position": 39730426,
+    "cancer_types": [
+      "breast",
+      "gastric"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "somatic",
+    "breast_panel": {
+      "role": "somatic",
+      "penetrance": null
+    },
+    "aliases": [
+      "HER2"
+    ]
+  },
+  "MYC": {
+    "symbol": "MYC",
+    "name": "MYC proto-oncogene, bHLH transcription factor",
+    "chromosome": "chr8",
+    "start_position": 127735434,
+    "end_position": 127742951,
+    "cancer_types": [
+      "lymphoma",
+      "leukemia",
+      "breast"
+    ],
+    "pathogenicity": "pathogenic",
+    "inheritance": "somatic",
+    "breast_panel": {
+      "role": "somatic",
+      "penetrance": null
+    }
   },
   "KRAS": {
     "symbol": "KRAS",
@@ -69,35 +315,6 @@
     ],
     "pathogenicity": "pathogenic",
     "inheritance": "somatic"
-  },
-  "PIK3CA": {
-    "symbol": "PIK3CA",
-    "name": "Phosphatidylinositol-4,5-bisphosphate 3-kinase catalytic subunit alpha",
-    "chromosome": "chr3",
-    "start_position": 179148114,
-    "end_position": 179240093,
-    "cancer_types": [
-      "breast",
-      "colorectal",
-      "endometrial"
-    ],
-    "pathogenicity": "pathogenic",
-    "inheritance": "somatic"
-  },
-  "PTEN": {
-    "symbol": "PTEN",
-    "name": "Phosphatase and tensin homolog",
-    "chromosome": "chr10",
-    "start_position": 87863247,
-    "end_position": 87971930,
-    "cancer_types": [
-      "breast",
-      "endometrial",
-      "prostate",
-      "brain"
-    ],
-    "pathogenicity": "pathogenic",
-    "inheritance": "autosomal_dominant"
   },
   "APC": {
     "symbol": "APC",
@@ -187,33 +404,6 @@
       "melanoma",
       "colorectal",
       "thyroid"
-    ],
-    "pathogenicity": "pathogenic",
-    "inheritance": "somatic"
-  },
-  "MYC": {
-    "symbol": "MYC",
-    "name": "MYC proto-oncogene, bHLH transcription factor",
-    "chromosome": "chr8",
-    "start_position": 127735434,
-    "end_position": 127742951,
-    "cancer_types": [
-      "lymphoma",
-      "leukemia",
-      "breast"
-    ],
-    "pathogenicity": "pathogenic",
-    "inheritance": "somatic"
-  },
-  "HER2": {
-    "symbol": "ERBB2",
-    "name": "Erb-b2 receptor tyrosine kinase 2",
-    "chromosome": "chr17",
-    "start_position": 39688094,
-    "end_position": 39728660,
-    "cancer_types": [
-      "breast",
-      "gastric"
     ],
     "pathogenicity": "pathogenic",
     "inheritance": "somatic"
