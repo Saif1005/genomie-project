@@ -34,7 +34,6 @@ services:
     env_file:
       - ./Backend/.env
     environment:
-      DEPLOYMENT_MODE: local
       LOCAL_DATA_ROOT: ${LOCAL_DATA_ROOT:-/data/zaynb}
       OLLAMA_HOST: http://ollama:11434
       HF_HOME: ${LOCAL_DATA_ROOT:-/data/zaynb}/models/huggingface
@@ -65,7 +64,6 @@ services:
       args:
         # Le navigateur appelle /api/v1 sur le port du frontend ; Next.js relaie ici.
         BACKEND_INTERNAL_URL: http://backend:8000
-        NEXT_PUBLIC_DEPLOYMENT_MODE: local
         NEXT_PUBLIC_LOCAL_DATA_ROOT: ${LOCAL_DATA_ROOT:-/data/zaynb}
     restart: unless-stopped
     ports:

@@ -1,29 +1,67 @@
 #!/usr/bin/env bash
-# Télécharge la référence hg38 (GATK Resource Bundle, Broad Institute) et les
-# known-sites BQSR dans $LOCAL_DATA_ROOT/reference/hg38, puis génère les index manquants.
+# Télécharge les données de référence publiques dans $LOCAL_DATA_ROOT/reference :
+#   hg38/     GATK Resource Bundle (Broad Institute) : FASTA, index, known-sites BQSR
+#   clinvar/  ClinVar GRCh38 (NCBI, domaine public) : classification des variants pathogènes
 #
-# Usage : bash scripts/download_reference.sh [--yes] [--build-bwa-index] [--with-dbsnp]
+# Usage : bash scripts/download_reference.sh [--yes] [--clinvar-only] [--build-bwa-index] [--with-dbsnp]
 #   --yes              pas de confirmation interactive
+#   --clinvar-only     seulement ClinVar (~0,2 Go) : suffit pour analyser des VCF
 #   --build-bwa-index  construit l'index BWA localement (≈ 1-2 h, ~6 Go RAM) au lieu de le télécharger
-#   --with-dbsnp       ajoute dbSNP 138 (~11 Go supplémentaires)
+#   --with-dbsnp       ajoute dbSNP 138 (~11 Go) aux known-sites BQSR
 #
-# Espace disque attendu : ~9,5 Go (FASTA 3,2 Go + index BWA 5,5 Go + known-sites ~0,1 Go)
+# Espace disque attendu : ~9,7 Go (FASTA 3,2 Go + index BWA 5,5 Go + known-sites ~0,1 Go + ClinVar ~0,2 Go)
 #                         ~21 Go avec --with-dbsnp. Prévoir 2× pendant le téléchargement.
+# Mettre à jour ClinVar (publication hebdomadaire) : relancer avec --clinvar-only --refresh-clinvar.
 # Reprise : relancer le script ; les fichiers partiels (.part) sont complétés (curl -C -).
 set -euo pipefail
 # shellcheck source=lib.sh
 . "$(dirname "$0")/lib.sh"
 load_env
 
-BUILD_BWA=0; WITH_DBSNP=0
+BUILD_BWA=0; WITH_DBSNP=0; CLINVAR_ONLY=0; REFRESH_CLINVAR=0
 for arg in "$@"; do
   case "$arg" in
     --yes) ZAYNB_YES=1 ;;
     --build-bwa-index) BUILD_BWA=1 ;;
     --with-dbsnp) WITH_DBSNP=1 ;;
+    --clinvar-only) CLINVAR_ONLY=1 ;;
+    --refresh-clinvar) REFRESH_CLINVAR=1 ;;
     *) die "Option inconnue : $arg" ;;
   esac
 done
+
+command -v curl >/dev/null 2>&1 || die "curl requis : sudo apt install curl"
+
+# --- ClinVar (NCBI) ------------------------------------------------------------
+CLINVAR_URL="https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz"
+CLINVAR_DIR="$LOCAL_DATA_ROOT/reference/clinvar"
+CLINVAR="$CLINVAR_DIR/clinvar_GRCh38.vcf.gz"
+download_clinvar() {
+  mkdir -p "$CLINVAR_DIR"
+  if [ -s "$CLINVAR" ] && [ "$REFRESH_CLINVAR" = 0 ]; then
+    info "ClinVar déjà présent : $CLINVAR ($(zcat "$CLINVAR" | head -50 | grep -m1 '^##fileDate' || echo 'date inconnue'))"
+    return
+  fi
+  info "↓ ClinVar GRCh38 ($CLINVAR_URL)"
+  curl -fL --retry 5 --retry-delay 10 -o "$CLINVAR.part" "$CLINVAR_URL"
+  expected=$(curl -fsL "$CLINVAR_URL.md5" | awk '{print $1}')
+  if [ -n "$expected" ]; then
+    [ "$(md5sum "$CLINVAR.part" | awk '{print $1}')" = "$expected" ] \
+      || { rm -f "$CLINVAR.part"; die "MD5 ClinVar invalide — relancez"; }
+    info "  MD5 vérifié"
+  fi
+  gzip -t "$CLINVAR.part" || { rm -f "$CLINVAR.part"; die "ClinVar corrompu — relancez"; }
+  mv "$CLINVAR.part" "$CLINVAR"
+  # L'index du panel (cache JSON) est reconstruit automatiquement au prochain job
+  rm -f "$CLINVAR".panel-*.json
+  info "ClinVar prêt : $(zcat "$CLINVAR" | head -50 | grep -m1 '^##fileDate')"
+}
+
+download_clinvar
+if [ "$CLINVAR_ONLY" = 1 ]; then
+  echo "${C_OK}ClinVar prêt dans $CLINVAR_DIR${C_RST}"
+  exit 0
+fi
 
 BASE_URL="https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0"
 REF_DIR="$LOCAL_DATA_ROOT/reference/hg38"
@@ -50,8 +88,6 @@ if [ "$WITH_DBSNP" = 1 ]; then
   FILES+=("Homo_sapiens_assembly38.dbsnp138.vcf Homo_sapiens_assembly38.dbsnp138.vcf")
   FILES+=("Homo_sapiens_assembly38.dbsnp138.vcf.idx Homo_sapiens_assembly38.dbsnp138.vcf.idx")
 fi
-
-command -v curl >/dev/null 2>&1 || die "curl requis : sudo apt install curl"
 
 remote_size() { curl -sIL "$BASE_URL/$1" | awk 'tolower($1)=="content-length:" {v=$2} END {gsub("\r","",v); print v}'; }
 remote_md5()  { curl -sIL "$BASE_URL/$1" | tr -d '\r' | awk -F'md5=' 'tolower($0) ~ /^x-goog-hash:.*md5=/ {print $2}' | tail -1; }

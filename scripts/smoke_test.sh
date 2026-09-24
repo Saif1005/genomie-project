@@ -75,9 +75,13 @@ section "1. Santé"
 HEALTH=$(curl -sf "$BACKEND_URL/health")
 if [ -n "$HEALTH" ] && [ "$(json_get "$HEALTH" status)" = "ok" ]; then
   ok "Backend $BACKEND_URL/health"
-  echo "       mode=$(json_get "$HEALTH" deployment_mode)  pipeline=$(json_get "$HEALTH" pipeline_backend)"
+  echo "       version=$(json_get "$HEALTH" version)  pipeline=$(json_get "$HEALTH" pipeline_backend)"
   echo "       raison : $(json_get "$HEALTH" pipeline_backend_reason)"
-  [ "$(json_get "$HEALTH" deployment_mode)" = "local" ] || ko "deployment_mode ≠ local"
+  clinvar=$(json_get "$HEALTH" clinvar)
+  case "$clinvar" in
+    *'"available": true'*) ok "Base ClinVar locale disponible" ;;
+    *) echo "       ClinVar local absent : le VCF de test est pré-annoté ; indispensable pour les vrais VCF (download_reference.sh --clinvar-only)" ;;
+  esac
 else
   ko "Backend injoignable sur $BACKEND_URL/health — bash scripts/logs.sh backend"
   echo; die "Arrêt : le backend doit répondre pour la suite du test."
@@ -94,13 +98,15 @@ IN_DIR="$LOCAL_DATA_ROOT/patients/$PATIENT/input"
 mkdir -p "$IN_DIR" && cp "$ROOT_DIR/scripts/testdata/smoke_brca.vcf" "$IN_DIR/smoke_brca.vcf" \
   || die "Impossible d'écrire dans $IN_DIR — sudo chown -R \$USER: $LOCAL_DATA_ROOT"
 VCF_PATH="$IN_DIR/smoke_brca.vcf"
-if JOB=$(run_job "VCF" /api/v1/analyze/vcf "{\"patient_id\":\"$PATIENT\",\"vcf_s3\":\"$VCF_PATH\"}"); then
+if JOB=$(run_job "VCF" /api/v1/analyze/vcf "{\"patient_id\":\"$PATIENT\",\"vcf_path\":\"$VCF_PATH\"}"); then
   ok "Job VCF terminé"
   REPORT=$(curl -sf "$BACKEND_URL/api/v1/jobs/$JOB/report")
   if [ -n "$REPORT" ]; then
     ok "Rapport clinique disponible ($(printf '%s' "$REPORT" | wc -c) octets)"
-    if printf '%s' "$REPORT" | grep -q BRCA1; then ok "Variant BRCA1 présent dans le rapport"
-    else ko "BRCA1 absent du rapport (panel ou filtrage VCF ?)"; fi
+    RISK=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["clinical_prediction"]["risk_level"])' "$REPORT")
+    GENES=$(python3 -c 'import json,sys; print(",".join(json.loads(sys.argv[1])["genomic_findings"]["identified_pathogenic_genes"]))' "$REPORT")
+    [ "$RISK" = "HIGH" ] && ok "Niveau de risque HIGH (attendu)" || ko "Niveau de risque $RISK (HIGH attendu)"
+    [ "$GENES" = "BRCA1,BRCA2" ] && ok "Gènes identifiés : $GENES" || ko "Gènes identifiés : '$GENES' (BRCA1,BRCA2 attendus)"
   else
     ko "Rapport introuvable pour le job $JOB"
   fi
@@ -125,7 +131,7 @@ else
   case "$R1" in "$LOCAL_DATA_ROOT"/*) ;; *) cp "$R1" "$IN_DIR/"; R1="$IN_DIR/$(basename "$R1")" ;; esac
   case "$R2" in "$LOCAL_DATA_ROOT"/*) ;; *) cp "$R2" "$IN_DIR/"; R2="$IN_DIR/$(basename "$R2")" ;; esac
   if JOB=$(run_job "FASTQ" /api/v1/analyze \
-      "{\"patient_id\":\"$PATIENT\",\"s3_uri_r1\":\"$R1\",\"s3_uri_r2\":\"$R2\"}"); then
+      "{\"patient_id\":\"$PATIENT\",\"fastq_r1\":\"$R1\",\"fastq_r2\":\"$R2\"}"); then
     ok "Job FASTQ terminé ($JOB)"
   else
     KO=$((KO + 1))

@@ -99,7 +99,6 @@ if [ -f "$ENV_FILE" ]; then
   ok "Backend/.env présent"
   perms=$(stat -c %a "$ENV_FILE")
   [ "$perms" = "600" ] || wrn "Backend/.env en $perms" "chmod 600 Backend/.env"
-  [ "${DEPLOYMENT_MODE:-local}" = "local" ] && ok "DEPLOYMENT_MODE=local" || wrn "DEPLOYMENT_MODE=${DEPLOYMENT_MODE}" "Mettre DEPLOYMENT_MODE=local pour le serveur on-premise"
 else
   wrn "Backend/.env absent" "Créé automatiquement par scripts/start.sh depuis Backend/.env.local.example"
 fi
@@ -108,6 +107,14 @@ case "$BIND_ADDRESS" in
   0.0.0.0) wrn "BIND_ADDRESS=0.0.0.0" "Expose sur toutes les interfaces : préférez l'IP LAN précise + pare-feu (ufw)" ;;
   *) wrn "BIND_ADDRESS=$BIND_ADDRESS" "Accessible depuis le réseau local : vérifiez le pare-feu, jamais d'accès Internet" ;;
 esac
+
+section "ClinVar ($LOCAL_DATA_ROOT/reference/clinvar)"
+CLINVAR="${CLINVAR_VCF:-$LOCAL_DATA_ROOT/reference/clinvar/clinvar_GRCh38.vcf.gz}"
+if [ -s "$CLINVAR" ]; then
+  ok "ClinVar : $(zcat "$CLINVAR" 2>/dev/null | head -50 | grep -m1 '^##fileDate' | cut -d= -f2)"
+else
+  ko "ClinVar absent ($CLINVAR)" "bash scripts/download_reference.sh --clinvar-only (~0,2 Go) — indispensable pour les VCF non annotés et le mode FASTQ"
+fi
 
 section "Référence génomique ($LOCAL_DATA_ROOT/reference/hg38)"
 REF="$LOCAL_DATA_ROOT/reference/hg38"
