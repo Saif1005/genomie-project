@@ -33,3 +33,6 @@ Frontend/.next/
 .DS_Store
 .idea/
 .vscode/
+
+# Artefacts de build Python
+*.egg-info/

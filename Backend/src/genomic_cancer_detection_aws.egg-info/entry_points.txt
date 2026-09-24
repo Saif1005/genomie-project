@@ -1,2 +1,0 @@
-[console_scripts]
-genomic-pipeline = scripts.agents.run_agentic_pipeline_cloud:main
