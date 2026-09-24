@@ -1,8 +1,9 @@
 # ZAYNB — Déploiement sur serveur local (on-premise, accès AnyDesk)
 
 Ce guide installe ZAYNB (backend FastAPI, frontend Next.js, Ollama/Mistral, BioGPT,
-pipeline GATK/Parabricks) sur **un serveur physique**, sans aucune dépendance AWS.
-Le mode AWS historique reste disponible avec `DEPLOYMENT_MODE=aws` (voir `Backend/.env.example`).
+pipeline GATK/Parabricks) sur **un serveur physique**, sans aucun service cloud.
+Toutes les données de référence sont publiques : hg38 et sites connus (GATK Resource Bundle,
+Broad Institute), ClinVar (NCBI, domaine public).
 
 ---
 
@@ -19,7 +20,7 @@ Le mode AWS historique reste disponible avec `DEPLOYMENT_MODE=aws` (voir `Backen
 | Réseau | Internet sortant pour l'installation (images, modèles, référence) | — |
 
 **Sans GPU, ou avec un GPU de moins de 16 Go de VRAM**, le pipeline FASTQ bascule automatiquement sur GATK4 CPU.
-Comptez plusieurs heures par échantillon, contre environ 22 min sur le T4 AWS. Le mode VCF direct reste rapide.
+L'alignement BWA-MEM prend alors plusieurs heures pour un génome, mais l'appel de variants est restreint au panel. Le mode VCF direct reste rapide (secondes).
 
 ## 2. Arborescence des données
 
@@ -28,12 +29,14 @@ Toutes les données vivent sous `LOCAL_DATA_ROOT` (par défaut `/data/zaynb`) :
 ```
 /data/zaynb/
 ├── reference/hg38/        # FASTA, .fai, .dict, index BWA, known-sites BQSR
+├── reference/clinvar/     # ClinVar GRCh38 + index du panel (cache)
+├── reference/panels/      # BED du panel (généré)
 ├── patients/<ID>/input/   # FASTQ R1/R2, VCF déposés par l'utilisateur
 ├── patients/<ID>/output/  # BAM, VCF, rapports JSON
 ├── models/
 │   ├── ollama/            # modèles Mistral (volume Ollama)
 │   └── huggingface/       # cache BioGPT (HF_HOME)
-└── tmp/                   # work / scratch / reports
+└── tmp/                   # travail, cache des résultats, état des jobs (tmp/jobs)
 ```
 
 Ce répertoire est monté **au même chemin** dans le conteneur backend. C'est indispensable,
@@ -62,8 +65,9 @@ bash scripts/start.sh
 # 5. Modèles : Mistral (~4 Go), BioGPT (~1,6 Go), image GATK (~2 Go), Parabricks si GPU ≥ 16 Go
 bash scripts/pull_models.sh
 
-# 6. Référence hg38 (≈ 9,5 Go ; ≈ 21 Go avec --with-dbsnp) — nécessaire uniquement pour FASTQ
-bash scripts/download_reference.sh
+# 6. Données de référence publiques
+bash scripts/download_reference.sh --clinvar-only   # ClinVar (~0,2 Go) : indispensable, suffit pour les VCF
+bash scripts/download_reference.sh                  # + hg38 (≈ 9,7 Go ; ≈ 21 Go avec --with-dbsnp) pour les FASTQ
 
 # 7. Vérification de bout en bout
 bash scripts/check_prereqs.sh
@@ -72,6 +76,8 @@ bash scripts/smoke_test.sh
 
 Les étapes 5 et 6 demandent une confirmation avant de télécharger (option `--yes` pour l'automatiser).
 `download_reference.sh` reprend là où il s'est arrêté si on le relance, et vérifie tailles et MD5.
+ClinVar est publié chaque semaine : `bash scripts/download_reference.sh --clinvar-only --refresh-clinvar`
+le met à jour (la version utilisée est inscrite dans chaque rapport).
 
 ## 4. Exploitation
 
@@ -80,12 +86,15 @@ Les étapes 5 et 6 demandent une confirmation avant de télécharger (option `--
 | `bash scripts/start.sh [--no-build]` | Démarre ollama + backend + frontend, attend `/health` |
 | `bash scripts/stop.sh` | Arrête tout (données et modèles conservés) |
 | `bash scripts/logs.sh [backend\|frontend\|ollama]` | Logs en continu |
-| `bash scripts/smoke_test.sh [--fastq R1 R2]` | Santé + analyse VCF synthétique BRCA1/BRCA2 (+ FASTQ optionnel) |
-| `curl http://127.0.0.1:8000/health` | Mode, backend pipeline choisi (gpu/cpu) et raison, GPU détectés |
+| `bash scripts/smoke_test.sh [--fastq R1 R2]` | Santé + analyse VCF synthétique BRCA1/BRCA2 → risque HIGH attendu (+ FASTQ optionnel) |
+| `curl http://127.0.0.1:8000/health` | Moteur choisi (gpu/cpu) et raison, GPU détectés, panel, disponibilité ClinVar |
+| `curl http://127.0.0.1:8000/api/v1/tools` | Agents de l'orchestrateur et leurs entrées/sorties |
 
 **Lancer une analyse** : déposer les fichiers dans `/data/zaynb/patients/<ID>/input/`, puis saisir
 dans l'interface le **chemin serveur** (ex. `/data/zaynb/patients/P001/input/sample.vcf`).
-Les URI `s3://` sont refusées en mode local, de même que tout chemin hors de `LOCAL_DATA_ROOT`.
+Tout chemin hors de `LOCAL_DATA_ROOT` est refusé. Chaque étape écrit son résultat dans
+`patients/<ID>/output/` (`annotated_variants.json`, `panel_analysis.json`, rapport `REP-*.json`).
+Relancer un job interrompu reprend l'appel de variants à la dernière étape terminée.
 
 **Choix du pipeline** (`PIPELINE_BACKEND` dans `Backend/.env`) :
 - `auto` (défaut) : Parabricks si un GPU dispose d'au moins `PARABRICKS_MIN_VRAM_GB` ; sinon GATK4 CPU, avec un avertissement dans les logs et `/health` ;
@@ -137,13 +146,20 @@ Aucun port ne doit jamais être ouvert sur Internet. Pas de redirection de port 
 | « Ollama injoignable » / assistant muet | Conteneur ollama arrêté ou modèle absent | `bash scripts/logs.sh ollama` ; `bash scripts/pull_models.sh` ; `docker compose -p zaynb ps` |
 | `Fichier introuvable sur le serveur` / `Chemin hors de LOCAL_DATA_ROOT` | Mauvais chemin saisi | Déposer le fichier sous `/data/zaynb/patients/<ID>/input/` et saisir le chemin absolu |
 | Job FASTQ : référence manquante | hg38 non téléchargée | `bash scripts/download_reference.sh` puis `bash scripts/check_prereqs.sh` |
+| Job en échec « VCF non annoté … base ClinVar absente » | ClinVar non téléchargé | `bash scripts/download_reference.sh --clinvar-only` puis relancer |
+| Risque INDÉTERMINÉ | Variant pathogène sous les seuils QC (QUAL, DP, VAF) ou perte de fonction non classée | Voir « Variants à confirmer » dans le rapport ; confirmer par une seconde technique (Sanger) |
 | `Impossible de créer /data/zaynb/...` | Droits | `sudo chown -R $USER: /data/zaynb` |
 | `permission denied ... docker.sock` | Utilisateur hors du groupe docker | `sudo usermod -aG docker $USER`, puis se reconnecter |
 
 ## 7. Limites connues
 
-- **Performances sans GPU équivalent au T4** : GATK4 CPU met plusieurs heures par échantillon (≈ 5 h mesurées contre ≈ 22 min sous Parabricks).
+- **Performances sans GPU ≥ 16 Go** : l'alignement BWA-MEM sur CPU prend plusieurs heures pour un génome
+  (≈ 45 min mesurées pour ≈ 6 Gb sur 8 cœurs) ; l'appel de variants, restreint au panel, reste court.
   Un GPU grand public de moins de 16 Go (ex. RTX 2050 de 4 Go) ne peut pas faire tourner Parabricks ; il sert seulement à BioGPT.
+- **Périmètre clinique** : variants ponctuels et petits indels classés dans ClinVar ; pas de CNV ni de grands
+  réarrangements ; couverture du panel non mesurée (voir les limites dans chaque rapport).
+- **Parabricks** : les commandes suivent la documentation Parabricks 4.6 mais n'ont pas pu être exécutées
+  sans GPU compatible ; valider sur le serveur avec un petit jeu FASTQ (`smoke_test.sh --fastq`).
 - **WSL2** : utilisable pour tester, déconseillé en production (performances disque, accès GPU dans Docker).
-- **Jobs en mémoire** : l'état des jobs n'est pas persisté. Un redémarrage du backend perd le suivi des jobs en cours, mais pas les fichiers produits dans `patients/<ID>/output/`.
+- **Redémarrage** : l'état des jobs est conservé (`tmp/jobs`) ; un job en cours au moment d'un redémarrage est marqué « interrompu » et peut être relancé (les étapes terminées sont reprises).
 - **Un job à la fois** : les jobs sont exécutés en série (un seul worker de pipeline), ce qui est voulu pour protéger la VRAM.
