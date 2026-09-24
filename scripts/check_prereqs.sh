@@ -74,8 +74,9 @@ else
 fi
 
 section "Docker"
-if command -v docker >/dev/null 2>&1; then
-  ok "$(docker --version)"
+# `docker --version` plutôt que `command -v` : sous WSL, un stub « docker » existe sans Docker
+if DOCKER_VERSION=$(docker --version 2>/dev/null); then
+  ok "$DOCKER_VERSION"
   if docker info >/dev/null 2>&1; then
     ok "Démon Docker accessible"
   else
