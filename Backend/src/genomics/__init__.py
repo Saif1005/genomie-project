@@ -11,6 +11,7 @@ from src.genomics.clinvar import (
     ClinVarIndex,
     ClinVarRecord,
     EmbeddedClinVar,
+    StoredAnnotator,
     build_annotator,
     parse_clnsig,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "QCThresholds",
     "RiskAssessment",
     "RiskLevel",
+    "StoredAnnotator",
     "VCFFormatError",
     "Variant",
     "analyze_panel",

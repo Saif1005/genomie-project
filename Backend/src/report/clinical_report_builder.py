@@ -1,206 +1,176 @@
-"""Assemblage du rapport clinique JSON structuré."""
+"""Assemblage du rapport clinique JSON à partir du contexte du pipeline.
+
+Aucune décision ici : le texte est dérivé de l'analyse du panel et du niveau de risque déjà
+calculés, par gabarits fixes (même analyse → même texte).
+"""
 
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from src.database.cancer_genes_db import get_cancer_genes_db
+from src import __version__
+from src.core import context as K
 from src.schemas.clinical_report import (
+    AnnotationInfo,
     ClinicalPrediction,
     ClinicalReport,
     GATKMetrics,
     GenomicFindings,
-    LEGAL_DISCLAIMER,
     PathogenicVariantFinding,
+    Reproducibility,
     SystemMetrics,
 )
 
-_GENE_DISPLAY = {"ERBB2": "HER2"}
-
-CLINICAL_MIN_QUAL = float(os.getenv("CLINICAL_MIN_QUAL", "20"))
-CLINICAL_MIN_DP = int(os.getenv("CLINICAL_MIN_DP", "10"))
-CLINICAL_MIN_VAF = float(os.getenv("CLINICAL_MIN_VAF", "0.05"))
-
-
-def _display_gene(symbol: str) -> str:
-    u = symbol.upper()
-    return _GENE_DISPLAY.get(u, u)
+_ENGINE_LABELS = {
+    "parabricks": "NVIDIA Clara Parabricks + GATK (GPU)",
+    "gatk4-cpu": "GATK4 BWA-MEM / HaplotypeCaller (CPU)",
+}
+_ZYGOSITY_FR = {"heterozygous": "hétérozygote", "homozygous": "homozygote", "hemizygous": "hémizygote"}
 
 
-def _panel_symbols_from_db() -> List[str]:
-    db = get_cancer_genes_db()
-    seen: set[str] = set()
-    symbols: List[str] = []
-    for gene_key in db.get_all_genes():
-        info = db.get_gene_info(gene_key)
-        if not info:
-            continue
-        types = info.get("cancer_types", [])
-        if not any("breast" in str(t).lower() for t in types):
-            continue
-        sym = _display_gene(str(info.get("symbol", gene_key)))
-        if sym not in seen:
-            seen.add(sym)
-            symbols.append(sym)
-    return sorted(symbols)
-
-
-def variant_dict_to_finding(v: Dict[str, Any]) -> PathogenicVariantFinding:
-    gene_raw = str(v.get("gene", "Unknown")).upper()
-    gene = _display_gene(gene_raw)
-    db = get_cancer_genes_db()
-    gene_info = db.get_gene_info(gene_raw) or db.get_gene_info(gene) or {}
-    ref = v.get("ref", "")
-    alt = v.get("alt", "")
-    chrom = str(v.get("chromosome", ""))
-    if chrom and not chrom.startswith("chr"):
-        chrom = f"chr{chrom.lstrip('chr')}"
-
+def to_finding(f: Dict[str, Any]) -> PathogenicVariantFinding:
     return PathogenicVariantFinding(
-        gene=gene,
-        chromosome=chrom,
-        position=int(v.get("position", 0)),
-        mutation=f"{ref}>{alt}" if ref and alt else v.get("mutation", "N/A"),
+        gene=f["gene"],
+        chromosome=f["chromosome"],
+        position=int(f["position"]),
+        mutation=f["mutation"],
         gatk_metrics=GATKMetrics(
-            QUAL=round(float(v["quality"]), 1) if v.get("quality") is not None else None,
-            DP=int(v.get("dp") or v.get("depth") or 0) or None,
-            VAF=round(float(v["vaf"]), 3) if v.get("vaf") is not None else None,
+            QUAL=round(float(f["quality"]), 1) if f.get("quality") is not None else None,
+            DP=f.get("dp"),
+            VAF=round(float(f["vaf"]), 3) if f.get("vaf") is not None else None,
         ),
-        pathogenicity=str(
-            gene_info.get("pathogenicity", v.get("pathogenicity", "pathogenic"))
-        ),
-        inheritance=gene_info.get("inheritance"),
+        pathogenicity=f.get("clinvar_significance") or "Non classé",
+        inheritance=f.get("inheritance"),
+        zygosity=f.get("zygosity"),
+        penetrance=f.get("penetrance"),
+        hgvs=f.get("hgvs"),
+        rsid=f.get("rsid"),
+        variation_id=f.get("variation_id"),
+        review_status=f.get("review_status"),
+        review_stars=f.get("review_stars"),
+        conditions=f.get("conditions"),
+        consequence=f.get("consequence"),
+        filter=f.get("filter"),
+        qc_status=f.get("qc_status"),
+        qc_flags=f.get("qc_flags") or [],
+        note=f.get("note"),
     )
 
 
-def build_genomic_findings(context: Dict[str, Any]) -> GenomicFindings:
-    panel = _panel_symbols_from_db()
-    variants_raw = context.get("breast_cancer_variants") or context.get("variants") or []
-    findings = [variant_dict_to_finding(v) for v in variants_raw if isinstance(v, dict)]
-
-    risk = context.get("breast_cancer_risk_detected", False)
-    genes = context.get("identified_pathogenic_genes") or []
-    if not genes and findings:
-        genes = sorted({f.gene for f in findings})
-    if findings:
-        risk = True
-
-    return GenomicFindings(
-        breast_cancer_panel_analyzed=panel,
-        pathogenic_variants_detected=findings,
-        breast_cancer_risk_detected=bool(risk),
-        identified_pathogenic_genes=genes,
+def _sentence(f: Dict[str, Any]) -> str:
+    ident = f.get("hgvs") or f"{f['chromosome']}:{f['position']} {f['mutation']}"
+    rs = f" ({f['rsid']})" if f.get("rsid") else ""
+    zyg = _ZYGOSITY_FR.get(f.get("zygosity") or "", "de zygotie indéterminée")
+    stars = f"{f['review_stars']}★" if f.get("review_stars") is not None else "revue inconnue"
+    vaf = f"{f['vaf']:.2f}" if f.get("vaf") is not None else "NA"
+    return (
+        f"Variant {ident}{rs} {zyg} dans {f['gene']} (pénétrance {f.get('penetrance')}), classé "
+        f"{f.get('clinvar_significance')} dans ClinVar ({stars}) ; QUAL={f.get('quality')}, "
+        f"DP={f.get('dp')}, VAF={vaf}."
     )
 
 
-def _risk_from_findings(findings: GenomicFindings) -> str:
-    if not findings.pathogenic_variants_detected:
-        return "LOW"
-    high_genes = {"BRCA1", "BRCA2", "TP53"}
-    detected = {f.gene for f in findings.pathogenic_variants_detected}
-    if detected & high_genes:
-        return "HIGH"
-    return "MODERATE"
-
-
-def _diagnostic_conclusion(risk_level: str) -> str:
-    mapping = {
-        "HIGH": "Risque génétique de cancer du sein : ÉLEVÉ",
-        "MODERATE": "Risque génétique de cancer du sein : MODÉRÉ",
-        "LOW": "Risque génétique de cancer du sein : FAIBLE",
-    }
-    return mapping.get(risk_level.upper(), mapping["LOW"])
-
-
-def _build_clinical_summary(
-    findings: GenomicFindings,
-    prediction_raw: Optional[Dict[str, Any]] = None,
-) -> str:
-    if prediction_raw and prediction_raw.get("clinical_summary"):
-        return prediction_raw["clinical_summary"]
-
-    if not findings.pathogenic_variants_detected:
-        return (
-            "Aucun variant pathogène du panel cancer du sein (BRCA1, BRCA2, TP53, PIK3CA, "
-            "PTEN, MYC, HER2) n'a été détecté après filtrage GATK (QUAL, DP, VAF). "
-            "Le profil génétique analysé ne présente pas d'altération connue à haut risque "
-            "pour le cancer du sein sur les gènes ciblés."
+def build_clinical_summary(analysis: Dict[str, Any], risk_level: str) -> str:
+    confirmed = analysis.get("confirmed", [])
+    to_confirm = analysis.get("to_confirm", [])
+    genes = len(analysis.get("panel_genes", []))
+    parts: List[str] = [_sentence(f) for f in confirmed]
+    for f in to_confirm:
+        why = f.get("note") or "critères de qualité non remplis (" + ", ".join(f.get("qc_flags", [])) + ")"
+        parts.append(f"À confirmer par une seconde technique : {_sentence(f)} Motif : {why}.")
+    if not confirmed and not to_confirm:
+        parts.append(
+            f"Aucun variant pathogène ou probablement pathogène (ClinVar) n'a été identifié sur les "
+            f"{genes} gènes germinaux du panel ({analysis.get('variants_in_panel', 0)} variants appelés "
+            "dans les régions du panel)."
         )
-
-    paragraphs: List[str] = []
-    for v in findings.pathogenic_variants_detected:
-        m = v.gatk_metrics
-        inh = v.inheritance or "non documentée"
-        paragraphs.append(
-            f"Variant pathogène confirmé sur {v.gene} ({v.chromosome}:{v.position}, "
-            f"mutation {v.mutation}). Les métriques GATK (QUAL={m.QUAL}, DP={m.DP}, "
-            f"VAF={m.VAF}) supportent la présence de l'altération. "
-            f"Le gène {v.gene} est associé à un mode de transmission {inh.replace('_', ' ')} "
-            f"et à un risque accru de carcinome mammaire selon cancer_genes_db."
-        )
-    return " ".join(paragraphs)
+    if risk_level in ("HIGH", "MODERATE", "INDETERMINATE"):
+        parts.append("Une consultation d'oncogénétique est recommandée pour l'interprétation et le conseil familial.")
+    return " ".join(parts)
 
 
-def build_clinical_prediction(
-    findings: GenomicFindings,
-    prediction_raw: Optional[Dict[str, Any]] = None,
-    model_name: str = "BioGPT",
-) -> ClinicalPrediction:
-    raw = prediction_raw or {}
-    risk = raw.get("risk_level", _risk_from_findings(findings)).upper()
-    if risk not in ("HIGH", "MODERATE", "LOW"):
-        risk = _risk_from_findings(findings)
+def _engine_label(ctx: Dict[str, Any]) -> str:
+    backend = ctx.get(K.PIPELINE_BACKEND)
+    if backend:
+        return _ENGINE_LABELS.get(backend, backend)
+    return "VCF fourni (appel de variants externe)"
 
-    return ClinicalPrediction(
-        model=model_name,
-        risk_level=risk,
-        diagnostic_conclusion=raw.get(
-            "diagnostic_conclusion", _diagnostic_conclusion(risk)
-        ),
-        clinical_summary=_build_clinical_summary(findings, raw),
-        legal_disclaimer=raw.get("legal_disclaimer", LEGAL_DISCLAIMER),
-        status="AWAITING_MEDICAL_VALIDATION",
-    )
+
+def _hardware() -> str:
+    explicit = os.getenv("PIPELINE_HARDWARE")
+    if explicit:
+        return explicit
+    from src.utils.gpu_manager import gpu_inventory
+
+    gpus = gpu_inventory()
+    gpu_txt = ", ".join(f"{g['name']} ({g['vram_mb'] / 1024:.0f} Go)" for g in gpus) or "sans GPU"
+    return f"Serveur local ({os.cpu_count()} cœurs) — {gpu_txt}"
 
 
 def build_clinical_report(
     context: Dict[str, Any],
     execution_time_seconds: float = 0.0,
     steps_completed: Optional[List[str]] = None,
+    orchestration: Optional[Dict[str, Any]] = None,
 ) -> ClinicalReport:
-    patient_id = context.get("patient_id", "UNKNOWN")
-    date_str = datetime.utcnow().strftime("%Y%m%d")
-    report_id = f"REP-{patient_id}-{date_str}"
+    pid = context.get(K.PATIENT_ID, "UNKNOWN")
+    analysis: Dict[str, Any] = context.get(K.PANEL_ANALYSIS) or {}
+    prediction: Dict[str, Any] = context.get(K.PREDICTION_RESULTS) or {}
+    annotation: Dict[str, Any] = context.get(K.ANNOTATION) or {}
+    input_sha = context.get(K.INPUT_SHA256)
+    risk_level = prediction.get("risk_level", "INDETERMINATE")
 
-    genomic = build_genomic_findings(context)
-    prediction_raw = context.get("prediction_results") or context.get("clinical_prediction")
-    model_name = context.get("model_name") or "microsoft/biogpt"
-    if prediction_raw and prediction_raw.get("model_name"):
-        model_name = prediction_raw["model_name"]
-    display_model = (
-        "BioGPT"
-        if "biogpt" in str(model_name).lower()
-        else model_name
-    )
-
-    parabricks_ver = os.getenv(
-        "PARABRICKS_IMAGE", "nvcr.io/nvidia/clara/clara-parabricks:4.6.0-1"
-    ).split(":")[-1]
+    date = datetime.now(timezone.utc).strftime("%Y%m%d")
+    report_id = f"REP-{pid}-{date}" + (f"-{input_sha[:8]}" if input_sha else "")
+    commentary_model = prediction.get("commentary_model")
+    model = prediction.get("decision_method") or "zaynb-rules-v1"
+    if commentary_model:
+        model = f"{model} + commentaire {commentary_model}"
 
     return ClinicalReport(
         report_id=report_id,
-        patient_id=patient_id,
+        patient_id=pid,
         system_metrics=SystemMetrics(
             execution_time_seconds=round(execution_time_seconds, 1),
-            pipeline_engine=f"NVIDIA Clara Parabricks {parabricks_ver}",
-            hardware=os.getenv("PIPELINE_HARDWARE", "AWS g4dn.xlarge"),
-            steps_completed=steps_completed or [],
+            pipeline_engine=_engine_label(context),
+            hardware=_hardware(),
+            steps_completed=list(steps_completed or []),
+            orchestration=orchestration or {},
         ),
-        genomic_findings=genomic,
-        clinical_prediction=build_clinical_prediction(
-            genomic, prediction_raw, display_model
+        genomic_findings=GenomicFindings(
+            breast_cancer_panel_analyzed=analysis.get("panel_genes", []),
+            pathogenic_variants_detected=[to_finding(f) for f in analysis.get("confirmed", [])],
+            variants_to_confirm=[to_finding(f) for f in analysis.get("to_confirm", [])],
+            vus_detected=[to_finding(f) for f in analysis.get("vus", [])],
+            conflicting_variants=[to_finding(f) for f in analysis.get("conflicting", [])],
+            breast_cancer_risk_detected=risk_level in ("HIGH", "MODERATE"),
+            identified_pathogenic_genes=analysis.get("identified_genes", []),
+            variants_in_panel=analysis.get("variants_in_panel", 0),
+            annotation=AnnotationInfo(
+                source=analysis.get("annotation_source"), version=analysis.get("annotation_version")
+            ),
         ),
-        report_s3=context.get("report_s3"),
+        clinical_prediction=ClinicalPrediction(
+            model=model,
+            risk_level=risk_level,
+            diagnostic_conclusion=prediction.get("diagnostic_conclusion", ""),
+            clinical_summary=build_clinical_summary(analysis, risk_level),
+            rationale=prediction.get("rationale", []),
+            limitations=prediction.get("limitations", []),
+            decision_method=prediction.get("decision_method"),
+            model_commentary=prediction.get("model_commentary"),
+            commentary_model=commentary_model,
+        ),
+        reproducibility=Reproducibility(
+            input_sha256=input_sha,
+            panel_version=analysis.get("panel_version"),
+            annotation_source=annotation.get("source") or analysis.get("annotation_source"),
+            annotation_version=annotation.get("version") or analysis.get("annotation_version"),
+            qc_thresholds=analysis.get("qc_thresholds", {}),
+            decision_method=prediction.get("decision_method"),
+            software_version=__version__,
+        ),
+        report_path=context.get(K.REPORT_URI),
     )

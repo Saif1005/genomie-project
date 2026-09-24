@@ -10,8 +10,7 @@ from loguru import logger
 
 from src.llm.ollama_client import OllamaClient
 
-_S3_RE = re.compile(r"s3://[a-z0-9.\-]+/\S+", re.IGNORECASE)
-# Mode local : chemins serveur vers FASTQ/VCF (ex. /data/zaynb/patients/P1/input/R1.fastq.gz)
+# Chemins serveur vers FASTQ/VCF (ex. /data/zaynb/patients/P1/input/R1.fastq.gz)
 _LOCAL_PATH_RE = re.compile(r"(?<![\w:])/[\w.\-/]+\.(?:fastq|fq|vcf)(?:\.gz)?\b", re.IGNORECASE)
 _PATIENT_RE = re.compile(r"\b(PATIENT\d+|[A-Za-z][A-Za-z0-9_\-]{2,31})\b")
 _JOB_RE = re.compile(
@@ -22,8 +21,8 @@ _JOB_RE = re.compile(
 ASSISTANT_SYSTEM = """Tu es l'assistant clinique du système multi-agents Zaynb (cancer du sein).
 
 Tu comprends le français et l'anglais. Tu aides les cliniciens à :
-- lancer une analyse FASTQ (Parabricks GATK → VCF → BioGPT)
-- lancer une analyse VCF seule
+- lancer une analyse FASTQ (GATK/Parabricks → annotation ClinVar → risque → rapport)
+- lancer une analyse VCF seule (chemin sur le serveur)
 - expliquer le pipeline et les agents
 - consulter le statut d'un job
 
@@ -31,17 +30,17 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown) :
 {
   "intent": "start_fastq|start_vcf|explain_pipeline|job_status|help|chat",
   "patient_id": null,
-  "s3_uri_r1": null,
-  "s3_uri_r2": null,
-  "vcf_s3": null,
+  "fastq_r1": null,
+  "fastq_r2": null,
+  "vcf_path": null,
   "job_id": null,
   "reply": "réponse naturelle courte en français",
   "missing_fields": []
 }
 
 Règles :
-- start_fastq : patient_id + s3_uri_r1 + s3_uri_r2 requis (ou indiquer missing_fields)
-- start_vcf : patient_id + vcf_s3 requis
+- start_fastq : patient_id + fastq_r1 + fastq_r2 requis (ou indiquer missing_fields)
+- start_vcf : patient_id + vcf_path requis
 - job_status : extraire job_id UUID si mentionné
 - explain_pipeline / help : pas de lancement
 - reply : ton professionnel, clair, biomédical
@@ -111,7 +110,7 @@ class AssistantAgent:
         self, message: str, context: Dict[str, Any]
     ) -> Dict[str, Any]:
         lower = message.lower()
-        s3_uris = _S3_RE.findall(message) + _LOCAL_PATH_RE.findall(message)
+        uris = _LOCAL_PATH_RE.findall(message)
         patient = _PATIENT_RE.search(message)
         job = _JOB_RE.search(message)
         patient_id = patient.group(1) if patient else context.get("patient_id")
@@ -134,20 +133,20 @@ class AssistantAgent:
         ):
             return {"intent": "explain_pipeline", "reply": "", "missing_fields": []}
 
-        vcf_uris = [u for u in s3_uris if ".vcf" in u.lower()]
-        fastq_uris = [u for u in s3_uris if u not in vcf_uris]
+        vcf_uris = [u for u in uris if ".vcf" in u.lower()]
+        fastq_uris = [u for u in uris if u not in vcf_uris]
 
-        if vcf_uris or ("vcf" in lower and s3_uris):
-            vcf_s3 = vcf_uris[0] if vcf_uris else (s3_uris[0] if s3_uris else None)
+        if vcf_uris or ("vcf" in lower and uris):
+            vcf_path = vcf_uris[0] if vcf_uris else (uris[0] if uris else None)
             missing = []
             if not patient_id:
                 missing.append("patient_id")
-            if not vcf_s3:
-                missing.append("vcf_s3")
+            if not vcf_path:
+                missing.append("vcf_path")
             return {
                 "intent": "start_vcf",
                 "patient_id": patient_id,
-                "vcf_s3": vcf_s3,
+                "vcf_path": vcf_path,
                 "reply": "",
                 "missing_fields": missing,
             }
@@ -163,14 +162,14 @@ class AssistantAgent:
             if not patient_id:
                 missing.append("patient_id")
             if not r1 and not context.get("pending_upload"):
-                missing.append("s3_uri_r1")
+                missing.append("fastq_r1")
             if not r2 and not context.get("pending_upload"):
-                missing.append("s3_uri_r2")
+                missing.append("fastq_r2")
             return {
                 "intent": "start_fastq",
                 "patient_id": patient_id,
-                "s3_uri_r1": r1,
-                "s3_uri_r2": r2,
+                "fastq_r1": r1,
+                "fastq_r2": r2,
                 "reply": "",
                 "missing_fields": missing,
             }
@@ -185,13 +184,13 @@ class AssistantAgent:
     def _merge_context(
         self, parsed: Dict[str, Any], context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        for key in ("patient_id", "job_id", "s3_uri_r1", "s3_uri_r2", "vcf_s3"):
+        for key in ("patient_id", "job_id", "fastq_r1", "fastq_r2", "vcf_path"):
             if not parsed.get(key) and context.get(key):
                 parsed[key] = context[key]
         if context.get("pending_upload") and parsed.get("intent") == "start_fastq":
             missing = list(parsed.get("missing_fields") or [])
             parsed["missing_fields"] = [
-                f for f in missing if f not in ("s3_uri_r1", "s3_uri_r2")
+                f for f in missing if f not in ("fastq_r1", "fastq_r2")
             ]
             if not parsed.get("patient_id"):
                 parsed.setdefault("missing_fields", []).append("patient_id")
@@ -203,23 +202,26 @@ class AssistantAgent:
         if missing:
             labels = {
                 "patient_id": "identifiant patient",
-                "s3_uri_r1": "FASTQ R1 (S3 ou fichier attaché)",
-                "s3_uri_r2": "FASTQ R2 (S3 ou fichier attaché)",
-                "vcf_s3": "chemin du VCF (S3 ou serveur)",
+                "fastq_r1": "FASTQ R1 (chemin serveur ou fichier attaché)",
+                "fastq_r2": "FASTQ R2 (chemin serveur ou fichier attaché)",
+                "vcf_path": "chemin du VCF sur le serveur",
                 "job_id": "identifiant du job (UUID)",
             }
             need = ", ".join(labels.get(m, m) for m in missing)
             return f"Pour continuer, j'ai besoin de : {need}."
         replies = {
             "start_fastq": "Je lance l'analyse FASTQ via l'orchestrateur multi-agents.",
-            "start_vcf": "Je lance le workflow VCF (analyse → BioGPT → rapport).",
+            "start_vcf": "Je lance l'analyse VCF (annotation ClinVar → panel → risque → rapport).",
             "explain_pipeline": (
-                "Le pipeline Zaynb enchaîne : téléchargement S3, alignement Parabricks GATK, "
-                "analyse du panel cancer du sein, inférence BioGPT et génération du rapport clinique."
+                "Le pipeline ZAYNB enchaîne : préparation des FASTQ, appel de variants GATK "
+                "(Parabricks sur GPU ou GATK4 sur CPU) restreint au panel, annotation ClinVar, "
+                "contrôle qualité, niveau de risque par règles explicites et rapport clinique. "
+                "BioGPT n'ajoute qu'un commentaire bibliographique, non décisionnel."
             ),
             "help": (
-                "Vous pouvez : attacher des FASTQ et lancer l'analyse, saisir des URIs S3, "
-                "ou me demander en langage naturel (ex. « Lance PATIENT001 avec s3://… »)."
+                "Vous pouvez : attacher des FASTQ et lancer l'analyse, saisir des chemins sur le serveur "
+                "(/data/zaynb/patients/<ID>/input/…), ou me demander en langage naturel "
+                "(ex. « Lance PATIENT001 avec /data/zaynb/patients/PATIENT001/input/R1.fastq.gz et R2… »)."
             ),
             "job_status": "Je consulte le statut du job.",
             "chat": "Comment puis-je vous aider pour l'analyse génomique ?",

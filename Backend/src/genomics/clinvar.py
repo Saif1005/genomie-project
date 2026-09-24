@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import gzip
 import json
-import os
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
@@ -253,12 +252,9 @@ class ClinVarIndex:
 
 
 def default_clinvar_path() -> Path:
-    from config.deployment import local_data_root
+    from config.settings import paths
 
-    explicit = os.getenv("CLINVAR_VCF")
-    if explicit:
-        return Path(explicit)
-    return local_data_root() / "reference" / "clinvar" / "clinvar_GRCh38.vcf.gz"
+    return paths().clinvar_vcf
 
 
 def build_annotator(vcf_has_clnsig: bool, panel: GenePanel, clinvar_vcf: Optional[Path] = None) -> VariantAnnotator:
@@ -276,3 +272,15 @@ def build_annotator(vcf_has_clnsig: bool, panel: GenePanel, clinvar_vcf: Optiona
         "Impossible de conclure sans annotation : exécutez "
         "`bash scripts/download_reference.sh --clinvar-only` puis relancez l'analyse."
     )
+
+
+class StoredAnnotator:
+    """Annotations déjà calculées (artefact de l'agent d'annotation), relues à l'identique."""
+
+    def __init__(self, name: str, version: str, records: Dict[Tuple[str, int, str, str], Optional[ClinVarRecord]]):
+        self.name = name
+        self.version = version
+        self._records = records
+
+    def annotate(self, variant: Variant) -> Optional[ClinVarRecord]:
+        return self._records.get(variant.key)

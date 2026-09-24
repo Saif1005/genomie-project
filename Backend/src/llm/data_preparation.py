@@ -19,14 +19,9 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union, Tuple
 from loguru import logger
-import math
 
-# Import Variant class if available
-try:
-    from src.preprocessing.vcf_parser import Variant
-    from src.database.cancer_genes_db import get_cancer_genes_db
-except ImportError:
-    Variant = None
+from src.genomics.panel import get_panel as get_cancer_genes_db
+from src.genomics.variant import Variant
 
 # ---------------------------------------------------------------------------
 # Constantes selon standards ClinGen/CGC/VICC et AMP/ASCO/CAP
@@ -145,7 +140,7 @@ class TrainingDataPreparation:
         """
         Prepare training example from le JSON des métriques VCF (output pipeline GATK/VCF).
 
-        Ce JSON est produit par VCFParser.export_metrics_json (docs/METRIQUES_DETECTION_CANCER_SEIN.md)
+        Ce JSON est produit par src.genomics.analysis.to_vcf_metrics (docs/METRIQUES_DETECTION_CANCER_SEIN.md)
         et transmis par l'orchestrateur au bioLLM pour entraînement et prédiction (cancer oui/non).
 
         Args:
