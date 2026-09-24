@@ -4,17 +4,30 @@ import type { PathogenicVariant } from '@/types/api';
 interface PathogenicVariantsTableProps {
   variants: PathogenicVariant[];
   genes?: string[];
+  title?: string;
+  emptyMessage?: string;
+  /** Variants « à confirmer » : affiche le motif (contrôle qualité ou note) */
+  showQcReason?: boolean;
 }
+
+const ZYGOSITY_FR: Record<string, string> = {
+  heterozygous: 'hétéro.',
+  homozygous: 'homo.',
+  hemizygous: 'hémi.',
+};
 
 export default function PathogenicVariantsTable({
   variants,
   genes,
+  title = 'Variants pathogènes confirmés',
+  emptyMessage = 'Aucun variant pathogène ou probablement pathogène (ClinVar) sur les gènes germinaux du panel.',
+  showQcReason = false,
 }: PathogenicVariantsTableProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900 dark:shadow-card-dark overflow-hidden">
       <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-          Variants pathogènes
+          {title}
         </h2>
         {genes && genes.length > 0 && (
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
@@ -29,9 +42,7 @@ export default function PathogenicVariantsTable({
       {variants.length === 0 ? (
         <div className="flex items-center gap-3 px-6 py-10 text-slate-500">
           <AlertTriangle className="h-5 w-5 shrink-0 text-clinical-medium" />
-          <p className="text-sm">
-            Aucun variant pathogène détecté dans le panel cancer du sein pour cet échantillon.
-          </p>
+          <p className="text-sm">{emptyMessage}</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -44,7 +55,9 @@ export default function PathogenicVariantsTable({
                 <th className="px-4 py-3 text-right font-mono">QUAL</th>
                 <th className="px-4 py-3 text-right font-mono">DP</th>
                 <th className="px-4 py-3 text-right font-mono">VAF</th>
-                <th className="px-4 py-3">Pathogénicité</th>
+                <th className="px-4 py-3">Zygotie</th>
+                <th className="px-4 py-3">ClinVar</th>
+                {showQcReason && <th className="px-4 py-3">Motif</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -58,6 +71,9 @@ export default function PathogenicVariantsTable({
                   </td>
                   <td className="px-4 py-3.5 font-mono text-xs text-slate-800 dark:text-slate-200">
                     {v.mutation}
+                    {v.rsid && (
+                      <span className="ml-2 text-slate-500">{v.rsid}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3.5 font-mono text-xs text-slate-600 dark:text-slate-400">
                     {v.chromosome}:{v.position}
@@ -71,11 +87,28 @@ export default function PathogenicVariantsTable({
                   <td className="px-4 py-3.5 text-right font-mono text-sm tabular-nums text-dna-700 dark:text-dna-400">
                     {fmtVaf(v.gatk_metrics?.VAF)}
                   </td>
-                  <td className="px-4 py-3.5">
-                    <span className="rounded-md border border-clinical-high/30 bg-clinical-high/10 px-2 py-0.5 text-xs font-semibold uppercase text-clinical-high">
-                      {v.pathogenicity ?? 'pathogenic'}
-                    </span>
+                  <td className="px-4 py-3.5 text-xs text-slate-700 dark:text-slate-300">
+                    {ZYGOSITY_FR[v.zygosity ?? ''] ?? '—'}
                   </td>
+                  <td className="px-4 py-3.5">
+                    <span className="rounded-md border border-clinical-high/30 bg-clinical-high/10 px-2 py-0.5 text-xs font-semibold text-clinical-high">
+                      {(v.pathogenicity ?? 'Non classé').replace(/_/g, ' ')}
+                    </span>
+                    {v.review_stars != null && (
+                      <span
+                        className="ml-2 text-xs text-amber-500"
+                        title={v.review_status ?? undefined}
+                      >
+                        {'★'.repeat(v.review_stars)}
+                        {'☆'.repeat(Math.max(0, 4 - v.review_stars))}
+                      </span>
+                    )}
+                  </td>
+                  {showQcReason && (
+                    <td className="px-4 py-3.5 text-xs text-slate-600 dark:text-slate-400">
+                      {v.note ?? v.qc_flags?.join(', ') ?? '—'}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

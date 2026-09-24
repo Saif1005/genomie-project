@@ -1,36 +1,50 @@
 import type { PipelineStep } from '@/types/api';
-import { IS_LOCAL } from '@/lib/deployment';
 
 export const FASTQ_PIPELINE_STEPS: PipelineStep[] = [
   {
     id: 'data_manager',
-    label: 'Data Download',
-    description: IS_LOCAL
-      ? 'Validation des FASTQ sur le serveur'
-      : 'Téléchargement et validation des FASTQ depuis S3',
+    label: 'Préparation des données',
+    description: 'Validation des FASTQ R1/R2 sur le serveur',
   },
   {
     id: 'parabricks',
-    label: 'Parabricks Alignment',
-    description: IS_LOCAL
-      ? 'fq2bam → BQSR → HaplotypeCaller (GPU ≥ 16 Go, sinon GATK4 CPU)'
-      : 'fq2bam → BQSR → HaplotypeCaller (GATK GPU)',
+    label: 'Appel de variants',
+    description:
+      'BWA-MEM → duplicats → BQSR → HaplotypeCaller sur le panel (Parabricks GPU ≥ 16 Go, sinon GATK4 CPU)',
+  },
+  {
+    id: 'variant_annotation',
+    label: 'Annotation ClinVar',
+    description: 'Variants du panel annotés avec ClinVar (version tracée)',
   },
   {
     id: 'vcf_analysis',
-    label: 'VCF Analysis',
-    description: 'Panel gènes cancer du sein — variants pathogènes',
+    label: 'Analyse du panel',
+    description: 'Contrôle qualité clinique et classification (13 gènes germinaux)',
   },
   {
     id: 'prediction',
-    label: 'BioGPT Inference',
-    description: 'Inférence clinique et évaluation du risque',
+    label: 'Interprétation clinique',
+    description: 'Risque par règles explicites ; commentaire BioGPT non décisionnel',
+  },
+  {
+    id: 'report',
+    label: 'Rapport',
+    description: 'Rapport clinique JSON archivé dans le dossier patient',
   },
 ];
 
 export function normalizeStepId(step: string): string {
   if (step === 'genomic_pipeline') return 'parabricks';
   return step;
+}
+
+/** Étapes affichées : celles du plan renvoyé par l'API, sinon le pipeline FASTQ complet. */
+export function plannedSteps(plan?: string[] | null): PipelineStep[] {
+  if (!plan?.length) return FASTQ_PIPELINE_STEPS;
+  const ids = plan.map(normalizeStepId);
+  const steps = FASTQ_PIPELINE_STEPS.filter((s) => ids.includes(s.id));
+  return steps.length ? steps : FASTQ_PIPELINE_STEPS;
 }
 
 export function stepState(

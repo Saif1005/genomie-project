@@ -54,12 +54,49 @@ export default function ClinicalInferenceCard({
       {prediction.clinical_summary && (
         <div className="mb-5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Résumé BioGPT
+            Synthèse clinique
           </p>
           <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
             {prediction.clinical_summary}
           </p>
         </div>
+      )}
+
+      {(prediction.rationale?.length ?? 0) > 0 && (
+        <div className="mb-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Justification ({prediction.decision_method ?? 'règles'})
+          </p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-300">
+            {prediction.rationale!.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {prediction.model_commentary && (
+        <div className="mb-5 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Commentaire bibliographique {prediction.commentary_model ?? 'BioGPT'} — non décisionnel
+          </p>
+          <p className="text-sm italic leading-relaxed text-slate-600 dark:text-slate-400">
+            {prediction.model_commentary}
+          </p>
+        </div>
+      )}
+
+      {(prediction.limitations?.length ?? 0) > 0 && (
+        <details className="mb-5 text-sm text-slate-600 dark:text-slate-400">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Limites de l&apos;analyse
+          </summary>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {prediction.limitations!.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 dark:bg-amber-500/10">

@@ -6,7 +6,7 @@ import {
   Circle,
   Loader2,
 } from 'lucide-react';
-import { FASTQ_PIPELINE_STEPS, normalizeStepId, stepState } from '@/lib/utils/pipeline';
+import { normalizeStepId, plannedSteps, stepState } from '@/lib/utils/pipeline';
 import type { JobStatusResponse } from '@/types/api';
 
 interface ExecutionMonitorProps {
@@ -36,13 +36,13 @@ export default function ExecutionMonitor({
   const status = job?.status ?? 'queued';
   const stepsCompleted = job?.steps_completed ?? [];
   const currentStep = job?.current_step;
+  // Étapes réellement planifiées par l'orchestrateur (ex. VCF fourni : pas d'alignement)
+  const steps = plannedSteps(job?.plan);
 
-  const completedCount = FASTQ_PIPELINE_STEPS.filter((s) =>
+  const completedCount = steps.filter((s) =>
     stepsCompleted.map(normalizeStepId).includes(normalizeStepId(s.id)),
   ).length;
-  const progressPct = Math.round(
-    (completedCount / FASTQ_PIPELINE_STEPS.length) * 100,
-  );
+  const progressPct = Math.round((completedCount / steps.length) * 100);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card dark:border-slate-800 dark:bg-slate-900 dark:shadow-card-dark sm:p-8">
@@ -77,14 +77,14 @@ export default function ExecutionMonitor({
       </div>
 
       <ol className="relative space-y-0">
-        {FASTQ_PIPELINE_STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const state = stepState(
             step.id,
             stepsCompleted,
             currentStep,
             status,
           );
-          const isLast = index === FASTQ_PIPELINE_STEPS.length - 1;
+          const isLast = index === steps.length - 1;
 
           return (
             <li key={step.id} className="relative flex gap-4 pb-8 last:pb-0">

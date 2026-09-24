@@ -8,7 +8,6 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IS_LOCAL } from '@/lib/deployment';
 import {
   isFastqFile,
   PATIENT_ID_PATTERN,
@@ -104,7 +103,7 @@ export default function FastqUploadForm({
           Upload FASTQ direct
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Glissez vos fichiers paired-end — {IS_LOCAL ? 'enregistrement sur le serveur' : 'upload S3 automatique'} puis lancement du workflow
+          Glissez vos fichiers paired-end — enregistrement sur le serveur puis lancement du workflow
           multi-agents.
         </p>
       </div>

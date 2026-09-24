@@ -8,7 +8,6 @@ import type {
   JobStatusResponse,
   UploadFastqParams,
 } from '@/types/api';
-import { INPUT_LOCATION_LABEL, IS_LOCAL } from '@/lib/deployment';
 
 // Par défaut : appels relatifs (/api/v1/…, /health) relayés vers le backend par
 // les rewrites Next.js (next.config.mjs). NEXT_PUBLIC_API_URL force une URL directe.
@@ -111,13 +110,10 @@ export function isFastqFile(file: File): boolean {
   return FASTQ_EXTENSIONS.some((ext) => name.endsWith(ext));
 }
 
-export const S3_URI_PATTERN = /^s3:\/\/[a-z0-9.\-]+\/.+/i;
-/** Chemin absolu sur le serveur (mode local) — le backend vérifie qu'il est sous LOCAL_DATA_ROOT. */
+/** Chemin absolu sur le serveur — le backend vérifie qu'il est sous LOCAL_DATA_ROOT. */
 export const SERVER_PATH_PATTERN = /^\/[^\s]+$/;
-const INPUT_PATTERN = IS_LOCAL ? SERVER_PATH_PATTERN : S3_URI_PATTERN;
-const INPUT_FORMAT_HINT = IS_LOCAL
-  ? 'chemin absolu sur le serveur, ex. /data/zaynb/patients/ID/input/R1.fastq.gz'
-  : 's3://bucket/chemin';
+const INPUT_FORMAT_HINT =
+  'chemin absolu sur le serveur, ex. /data/zaynb/patients/ID/input/R1.fastq.gz';
 export const PATIENT_ID_PATTERN = /^[A-Za-z0-9_\-]+$/;
 
 export function validateAnalyzeForm(values: AnalyzeRequest): string | null {
@@ -127,19 +123,19 @@ export function validateAnalyzeForm(values: AnalyzeRequest): string | null {
   if (!PATIENT_ID_PATTERN.test(values.patient_id.trim())) {
     return 'Patient ID invalide (lettres, chiffres, _ et - uniquement).';
   }
-  if (!values.s3_uri_r1.trim()) {
-    return `Le ${INPUT_LOCATION_LABEL} FASTQ R1 est obligatoire.`;
+  if (!values.fastq_r1.trim()) {
+    return 'Le chemin serveur du FASTQ R1 est obligatoire.';
   }
-  if (!values.s3_uri_r2.trim()) {
-    return `Le ${INPUT_LOCATION_LABEL} FASTQ R2 est obligatoire.`;
+  if (!values.fastq_r2.trim()) {
+    return 'Le chemin serveur du FASTQ R2 est obligatoire.';
   }
-  if (!INPUT_PATTERN.test(values.s3_uri_r1.trim())) {
+  if (!SERVER_PATH_PATTERN.test(values.fastq_r1.trim())) {
     return `R1 invalide (format attendu : ${INPUT_FORMAT_HINT}).`;
   }
-  if (!INPUT_PATTERN.test(values.s3_uri_r2.trim())) {
+  if (!SERVER_PATH_PATTERN.test(values.fastq_r2.trim())) {
     return `R2 invalide (format attendu : ${INPUT_FORMAT_HINT}).`;
   }
-  if (values.s3_uri_r1.trim() === values.s3_uri_r2.trim()) {
+  if (values.fastq_r1.trim() === values.fastq_r2.trim()) {
     return 'Les chemins FASTQ R1 et R2 doivent être distincts.';
   }
   return null;

@@ -237,7 +237,7 @@ export default function AgentArchitectureDiagram() {
         <div>
           <div className={styles.title}>Architecture multi-agents — Projet Zaynb</div>
           <div className={styles.subtitle}>
-            FASTQ → BAM → VCF · OrchestratorAgent · Mistral LoRA
+            FASTQ → VCF → ClinVar → risque · orchestrateur LangGraph · serveur local
           </div>
         </div>
         <div className={styles.controls}>
@@ -284,7 +284,7 @@ export default function AgentArchitectureDiagram() {
         </div>
         <div className={styles.legendItem}>
           <span className={styles.legendSwatchPipeline} />
-          Pipeline génomique S3
+          Pipeline génomique — serveur local
         </div>
       </div>
 

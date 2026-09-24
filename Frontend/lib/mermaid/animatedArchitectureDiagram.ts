@@ -7,46 +7,46 @@ flowchart TB
     classDef tool fill:#064e3b,stroke:#10b981,color:#d1fae5
     classDef pipe fill:#1e293b,stroke:#64748b,color:#f1f5f9
 
-    subgraph HARNESS["Architecture Harness — Système multi-agents AGI"]
+    subgraph HARNESS["Architecture multi-agents ZAYNB — serveur local"]
         direction TB
 
         subgraph CLIENT["① Couche Client"]
-            UI["Interface utilisateur / API"]:::client
+            UI["Interface / API / assistant"]:::client
         end
 
-        subgraph HOST["② Couche Host"]
-            MASTER["OrchestratorAgent<br/>(LangChain ReAct)"]:::host
+        subgraph HOST["② Orchestrateur"]
+            MASTER["Graphe LangGraph<br/>planifier → exécuter"]:::host
         end
 
         subgraph AGENTS["③ Couche Agents"]
             direction LR
             AG1["DataManager"]:::agent
-            AG2["Parabricks"]:::agent
-            AG3["VCF Analysis"]:::agent
-            AG4["LLM Training<br/>1× one-shot"]:::agent
+            AG2["VariantCalling"]:::agent
+            AG3["VariantAnnotation"]:::agent
+            AG4["VCFAnalysis"]:::agent
             AG5["Prediction"]:::agent
-            AG6["Report Generator"]:::agent
+            AG6["ReportGenerator"]:::agent
         end
 
-        subgraph TOOLS["④ Couche Tools"]
+        subgraph TOOLS["④ Couche Outils"]
             direction TB
-            T1["S3 / EC2"]:::tool
-            T2["BWA-MEM / GATK"]:::tool
-            T3["VCFParser"]:::tool
-            T4["PEFT / LoRA"]:::tool
-            T5["Inférence LLM"]:::tool
-            T6["Génération PDF"]:::tool
+            T1["Stockage local"]:::tool
+            T2["Parabricks / GATK4"]:::tool
+            T3["ClinVar"]:::tool
+            T4["QC clinique"]:::tool
+            T5["Règles + BioGPT"]:::tool
+            T6["Rapport JSON"]:::tool
         end
     end
 
-    UI -->|"1. [Intention: Lancer analyse patient]<br/>Flux: {patient_id, fastq_R1, fastq_R2}"| MASTER
-    MASTER -->|"2. [Planification: Préparer infra S3]<br/>Flux: {task: 'upload_validate'}"| AG1
-    AG1 -->|"3. [Raisonnement: FASTQ prêts, alignement]<br/>Flux: {s3_fastq_paths, ref: 'hg38'}"| AG2
-    AG2 -->|"4. [Raisonnement: Variants trouvés, extraire]<br/>Flux: {vcf_file: 'variants.vcf.gz'}"| AG3
-    AG3 -->|"5. [Raisonnement: Gènes identifiés, préparer LLM]<br/>Flux: {cancer_genes_list, tmb_score}"| AG4
-    AG4 -->|"6. [Raisonnement: Modèle adapté, prédire]<br/>Flux: {lora_weights_path, variant_context}"| AG5
-    AG5 -->|"7. [Raisonnement: Diagnostic fait, synthétiser]<br/>Flux: {cancer_risk: 'High', details}"| AG6
-    AG6 -.->|"8. [Validation orchestrateur + clôture]<br/>Flux: {report_url, orchestrator_validated: true}"| MASTER
+    UI -->|"1. [Intention: analyser un patient]<br/>Flux: {patient_id, fastq_r1, fastq_r2}"| MASTER
+    MASTER -->|"2. [Plan: FASTQ fournis]<br/>Flux: {fastq_r1, fastq_r2}"| AG1
+    AG1 -->|"3. [FASTQ validés, appel de variants]<br/>Flux: {fastq_r1_uri, fastq_r2_uri}"| AG2
+    AG2 -->|"4. [VCF filtré sur le panel]<br/>Flux: {vcf_uri}"| AG3
+    AG3 -->|"5. [Allèles annotés ClinVar]<br/>Flux: {annotated_variants_path}"| AG4
+    AG4 -->|"6. [Variants classés]<br/>Flux: {panel_analysis}"| AG5
+    AG5 -->|"7. [Risque déterminé]<br/>Flux: {risk_level, rationale}"| AG6
+    AG6 -.->|"8. [Objectif atteint, fin du plan]<br/>Flux: {clinical_report, report_uri}"| MASTER
 
     AG1 --> T1
     AG2 --> T2
@@ -79,71 +79,69 @@ export const ARCH_WORKFLOW: ArchWorkflowStep[] = [
   {
     id: 1,
     agent: 'Client UI',
-    title: 'Intention — lancer analyse patient',
-    payload: '{patient_id, fastq_R1, fastq_R2}',
+    title: 'Intention — analyser un patient',
+    payload: '{patient_id, fastq_r1, fastq_r2}',
     delegation: ['UI', 'MASTER'],
   },
   {
     id: 2,
     agent: 'DataManager',
-    title: 'Planification — validation infra S3',
-    payload: "{task: 'upload_validate'}",
+    title: 'Validation et rangement des FASTQ',
+    payload: '{fastq_r1, fastq_r2}',
     delegation: ['MASTER', 'AG1'],
     tool: ['AG1', 'T1'],
-    toolName: 'S3 / EC2',
+    toolName: 'Stockage local',
   },
   {
     id: 3,
-    agent: 'Parabricks',
-    title: 'Alignement FASTQ → BAM (hg38)',
-    payload: "{s3_fastq_paths, ref: 'hg38'}",
+    agent: 'VariantCalling',
+    title: 'FASTQ → VCF filtré (panel, hg38)',
+    payload: '{fastq_r1_uri, fastq_r2_uri}',
     delegation: ['AG1', 'AG2'],
     tool: ['AG2', 'T2'],
-    toolName: 'BWA-MEM / GATK',
+    toolName: 'Parabricks / GATK4',
   },
   {
     id: 4,
-    agent: 'VCF Analysis',
-    title: 'Extraction variants pathogènes',
-    payload: "{vcf_file: 'variants.vcf.gz'}",
+    agent: 'VariantAnnotation',
+    title: 'Annotation ClinVar',
+    payload: '{vcf_uri}',
     delegation: ['AG2', 'AG3'],
     tool: ['AG3', 'T3'],
-    toolName: 'VCFParser',
+    toolName: 'ClinVar',
   },
   {
     id: 5,
-    agent: 'LLM Training',
-    title: 'Fine-tuning LoRA — exécution unique (one-shot)',
-    payload: '{cancer_genes_list, tmb_score}',
+    agent: 'VCFAnalysis',
+    title: 'Contrôle qualité et classification',
+    payload: '{annotated_variants_path}',
     delegation: ['AG3', 'AG4'],
     tool: ['AG4', 'T4'],
-    toolName: 'PEFT / LoRA',
-    oneShot: true,
-    oneShotNode: 'AG4',
+    toolName: 'QC clinique',
   },
   {
     id: 6,
     agent: 'Prediction',
-    title: 'Inférence risque cancer',
-    payload: '{lora_weights_path, variant_context}',
+    title: 'Niveau de risque (règles) + commentaire BioGPT',
+    payload: '{panel_analysis}',
     delegation: ['AG4', 'AG5'],
     tool: ['AG5', 'T5'],
-    toolName: 'Inférence LLM',
+    toolName: 'Règles + BioGPT',
   },
   {
     id: 7,
-    agent: 'Report Generator',
-    title: 'Synthèse rapport clinique',
-    payload: "{cancer_risk: 'High', details}",
+    agent: 'ReportGenerator',
+    title: 'Rapport clinique reproductible',
+    payload: '{risk_level, rationale}',
     delegation: ['AG5', 'AG6'],
     tool: ['AG6', 'T6'],
-    toolName: 'Génération PDF',
+    toolName: 'Rapport JSON',
   },
   {
     id: 8,
-    agent: 'OrchestratorAgent',
-    title: 'Validation du rapport — clôture et retour client',
-    payload: "{report_url, orchestrator_validated: true, status: 'success'}",
+    agent: 'Orchestrateur',
+    title: 'Objectif atteint — fin du plan et retour client',
+    payload: '{clinical_report, report_uri}',
     delegation: ['AG6', 'MASTER'],
     orchestratorValidation: true,
     validationNode: 'MASTER',
