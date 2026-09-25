@@ -1,0 +1,12 @@
+##fileformat=VCFv4.2
+##source=ZAYNB test fixture (VCF SYNTHETIQUE - aucune donnee patient reelle)
+##reference=hg38
+##FILTER=<ID=LowQual,Description="Low quality">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency (echantillon, GATK)">
+##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE1
+chr16	23620000	.	AC	A	610.0	PASS	AF=0.5;CSQ=A|frameshift_variant|HIGH|PALB2|ENSG00000083093	GT:AD:DP:GQ	0/1:21,20:41:99

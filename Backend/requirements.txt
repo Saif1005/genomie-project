@@ -1,49 +1,14 @@
-# AWS
-boto3==1.34.34
-botocore==1.34.34
-paramiko==3.4.0
+# ZAYNB backend — dépendances d'exécution (serveur local)
 
-# Genomics
-pysam==0.22.0
-pyvcf3==1.0.3
-biopython==1.83
-
-# LLM (torch et dépendances optionnelles pour API - installées seulement si nécessaire)
-# transformers==4.36.2
-# torch>=2.2.0
-# peft==0.7.1
-# accelerate==0.25.0
-# bitsandbytes==0.41.3
-
-# Data Processing
-pandas==2.1.4
-numpy==1.26.3
-
-# API (voir requirements-api.txt pour le stack complet déployé sur EC2)
+# API
 fastapi>=0.135.0
 uvicorn[standard]>=0.30.0
-pydantic>=2.7.0
+pydantic>=2.7.0,<3
+python-multipart>=0.0.9
 
-# Utils
-loguru==0.7.2
-python-dotenv==1.0.0
-pyyaml==6.0.1
+# Orchestration multi-agent (graphe planifier → exécuter)
+langgraph>=0.2.0
 
-# Reporting
-fpdf2==2.7.6
-plotly==5.18.0
-jinja2==3.1.2
-
-# Testing
-pytest==7.4.3
-pytest-cov==4.1.0
-pytest-mock==3.12.0
-
-# Code Quality
-black==23.11.0
-flake8==6.1.0
-mypy==1.7.1
-
-# Infrastructure
-# Note: Terraform is not a Python package - install separately if needed
-# See: https://developer.hashicorp.com/terraform/downloads
+# Utilitaires
+loguru>=0.7.2
+python-dotenv>=1.0.0

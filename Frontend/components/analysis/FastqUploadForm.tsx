@@ -103,7 +103,7 @@ export default function FastqUploadForm({
           Upload FASTQ direct
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Glissez vos fichiers paired-end — upload S3 automatique puis lancement du workflow
+          Glissez vos fichiers paired-end — enregistrement sur le serveur puis lancement du workflow
           multi-agents.
         </p>
       </div>

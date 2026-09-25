@@ -1,13 +1,3 @@
-"""Genomic cancer detection pipeline package."""
+"""ZAYNB — plateforme génomique clinique multi-agent (panel héréditaire cancer du sein)."""
 
-__version__ = "0.1.0"
-
-
-
-
-
-
-
-
-
-
+__version__ = "3.0.0"

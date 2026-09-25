@@ -30,7 +30,7 @@ export default function SystemMetricsCard({
         />
         <MetricItem
           icon={<Cpu className="h-4 w-4 text-dna-500" />}
-          label="Instance AWS"
+          label="Matériel"
           value={metrics.hardware}
         />
         <MetricItem

@@ -9,8 +9,9 @@ import type {
   UploadFastqParams,
 } from '@/types/api';
 
-const baseURL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:8000';
+// Par défaut : appels relatifs (/api/v1/…, /health) relayés vers le backend par
+// les rewrites Next.js (next.config.mjs). NEXT_PUBLIC_API_URL force une URL directe.
+const baseURL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
 
 export const apiClient = axios.create({
   baseURL,
@@ -65,10 +66,10 @@ export function formatApiError(err: unknown): string {
     const status = err.response?.status;
     const detail = err.response?.data;
     if (status === 404) {
-      return 'Endpoint assistant introuvable — redéployez l\'API (bash scripts/deployment/restart_api_ec2.sh).';
+      return 'Endpoint introuvable — vérifiez que le backend est démarré (bash scripts/start.sh).';
     }
     if (status === 0 || err.code === 'ERR_NETWORK') {
-      return `Réseau/CORS : impossible de joindre ${baseURL}. Vérifiez CORS_ORIGINS sur l'API.`;
+      return `Réseau : impossible de joindre l'API (${baseURL || 'proxy Next.js'}). Vérifiez que le backend tourne et, en accès direct, CORS_ORIGINS.`;
     }
     if (typeof detail === 'string') return detail;
     if (detail && typeof detail === 'object' && 'detail' in detail) {
@@ -109,7 +110,10 @@ export function isFastqFile(file: File): boolean {
   return FASTQ_EXTENSIONS.some((ext) => name.endsWith(ext));
 }
 
-export const S3_URI_PATTERN = /^s3:\/\/[a-z0-9.\-]+\/.+/i;
+/** Chemin absolu sur le serveur — le backend vérifie qu'il est sous LOCAL_DATA_ROOT. */
+export const SERVER_PATH_PATTERN = /^\/[^\s]+$/;
+const INPUT_FORMAT_HINT =
+  'chemin absolu sur le serveur, ex. /data/zaynb/patients/ID/input/R1.fastq.gz';
 export const PATIENT_ID_PATTERN = /^[A-Za-z0-9_\-]+$/;
 
 export function validateAnalyzeForm(values: AnalyzeRequest): string | null {
@@ -119,19 +123,19 @@ export function validateAnalyzeForm(values: AnalyzeRequest): string | null {
   if (!PATIENT_ID_PATTERN.test(values.patient_id.trim())) {
     return 'Patient ID invalide (lettres, chiffres, _ et - uniquement).';
   }
-  if (!values.s3_uri_r1.trim()) {
-    return 'Le chemin S3 FASTQ R1 est obligatoire.';
+  if (!values.fastq_r1.trim()) {
+    return 'Le chemin serveur du FASTQ R1 est obligatoire.';
   }
-  if (!values.s3_uri_r2.trim()) {
-    return 'Le chemin S3 FASTQ R2 est obligatoire.';
+  if (!values.fastq_r2.trim()) {
+    return 'Le chemin serveur du FASTQ R2 est obligatoire.';
   }
-  if (!S3_URI_PATTERN.test(values.s3_uri_r1.trim())) {
-    return 'URI S3 R1 invalide (format attendu : s3://bucket/chemin).';
+  if (!SERVER_PATH_PATTERN.test(values.fastq_r1.trim())) {
+    return `R1 invalide (format attendu : ${INPUT_FORMAT_HINT}).`;
   }
-  if (!S3_URI_PATTERN.test(values.s3_uri_r2.trim())) {
-    return 'URI S3 R2 invalide (format attendu : s3://bucket/chemin).';
+  if (!SERVER_PATH_PATTERN.test(values.fastq_r2.trim())) {
+    return `R2 invalide (format attendu : ${INPUT_FORMAT_HINT}).`;
   }
-  if (values.s3_uri_r1.trim() === values.s3_uri_r2.trim()) {
+  if (values.fastq_r1.trim() === values.fastq_r2.trim()) {
     return 'Les chemins FASTQ R1 et R2 doivent être distincts.';
   }
   return null;

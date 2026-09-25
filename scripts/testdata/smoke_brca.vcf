@@ -1,0 +1,18 @@
+##fileformat=VCFv4.2
+##source=ZAYNB-smoke-test (VCF SYNTHETIQUE - aucune donnee patient reelle)
+##reference=hg38
+##contig=<ID=chr1,length=248956422>
+##contig=<ID=chr13,length=114364328>
+##contig=<ID=chr17,length=83257441>
+##INFO=<ID=CLNSIG,Number=.,Type=String,Description="ClinVar clinical significance (pre-annotation : utilisee seulement si la base ClinVar locale est absente)">
+##INFO=<ID=CLNREVSTAT,Number=.,Type=String,Description="ClinVar review status">
+##INFO=<ID=GENEINFO,Number=1,Type=String,Description="Gene(s)">
+##INFO=<ID=RS,Number=1,Type=String,Description="dbSNP ID">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SMOKE001
+chr1	1014143	.	C	T	420.0	PASS	GENEINFO=ISG15:9636	GT:AD:DP:GQ	0/1:15,14:29:99
+chr13	32340300	rs80359550	GT	G	812.3	PASS	CLNSIG=Pathogenic;CLNREVSTAT=reviewed_by_expert_panel;GENEINFO=BRCA2:675;RS=80359550	GT:AD:DP:GQ	0/1:20,18:38:99
+chr17	43057062	rs80357906	T	TG	950.5	PASS	CLNSIG=Pathogenic;CLNREVSTAT=reviewed_by_expert_panel;GENEINFO=BRCA1:672;RS=80357906	GT:AD:DP:GQ	0/1:23,22:45:99

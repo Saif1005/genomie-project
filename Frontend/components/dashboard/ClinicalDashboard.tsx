@@ -30,6 +30,14 @@ export default function ClinicalDashboard({ report }: ClinicalDashboardProps) {
         genes={report.genomic_findings.identified_pathogenic_genes}
       />
 
+      {(report.genomic_findings.variants_to_confirm?.length ?? 0) > 0 && (
+        <PathogenicVariantsTable
+          title="Variants à confirmer (seconde technique)"
+          variants={report.genomic_findings.variants_to_confirm ?? []}
+          showQcReason
+        />
+      )}
+
       <ClinicalInferenceCard prediction={report.clinical_prediction} />
     </div>
   );

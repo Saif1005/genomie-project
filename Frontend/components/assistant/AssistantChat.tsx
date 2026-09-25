@@ -88,7 +88,7 @@ export default function AssistantChat({
 
       if (
         res.intent === 'start_fastq' &&
-        res.missing_fields.some((f) => f.startsWith('s3_uri')) &&
+        res.missing_fields.some((f) => f.startsWith('fastq_r')) &&
         hasPendingUpload
       ) {
         const pid = res.patient_id || patientId || extractPatientId(text);

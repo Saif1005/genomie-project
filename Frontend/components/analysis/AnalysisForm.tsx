@@ -3,7 +3,11 @@
 import { Loader2, Play, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { startAnalysis, validateAnalyzeForm } from '@/lib/api';
+import { LOCAL_DATA_ROOT } from '@/lib/deployment';
 import type { AnalyzeRequest } from '@/types/api';
+
+const fastqPlaceholder = (read: 'R1' | 'R2') =>
+  `${LOCAL_DATA_ROOT}/patients/PATIENT001/input/sample_${read}.fastq.gz`;
 
 interface AnalysisFormProps {
   onJobStarted: (jobId: string, patientId: string) => void;
@@ -12,8 +16,8 @@ interface AnalysisFormProps {
 
 const EMPTY: AnalyzeRequest = {
   patient_id: '',
-  s3_uri_r1: '',
-  s3_uri_r2: '',
+  fastq_r1: '',
+  fastq_r2: '',
 };
 
 export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormProps) {
@@ -39,8 +43,8 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
     try {
       const payload: AnalyzeRequest = {
         patient_id: form.patient_id.trim(),
-        s3_uri_r1: form.s3_uri_r1.trim(),
-        s3_uri_r2: form.s3_uri_r2.trim(),
+        fastq_r1: form.fastq_r1.trim(),
+        fastq_r2: form.fastq_r2.trim(),
       };
       const res = await startAnalysis(payload);
       onJobStarted(res.job_id, res.patient_id);
@@ -100,34 +104,34 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <label
-              htmlFor="s3_uri_r1"
+              htmlFor="fastq_r1"
               className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300"
             >
-              FASTQ R1 (S3) <span className="text-clinical-high">*</span>
+              FASTQ R1 (chemin serveur) <span className="text-clinical-high">*</span>
             </label>
             <input
-              id="s3_uri_r1"
-              type="url"
-              value={form.s3_uri_r1}
-              onChange={(e) => update('s3_uri_r1', e.target.value)}
-              placeholder="s3://bucket/patient/sample_R1.fastq.gz"
+              id="fastq_r1"
+              type="text"
+              value={form.fastq_r1}
+              onChange={(e) => update('fastq_r1', e.target.value)}
+              placeholder={fastqPlaceholder('R1')}
               disabled={disabled || loading}
               className="w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 font-mono text-xs text-slate-900 outline-none transition focus:border-dna-500 focus:ring-2 focus:ring-dna-500/20 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white sm:text-sm"
             />
           </div>
           <div>
             <label
-              htmlFor="s3_uri_r2"
+              htmlFor="fastq_r2"
               className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300"
             >
-              FASTQ R2 (S3) <span className="text-clinical-high">*</span>
+              FASTQ R2 (chemin serveur) <span className="text-clinical-high">*</span>
             </label>
             <input
-              id="s3_uri_r2"
-              type="url"
-              value={form.s3_uri_r2}
-              onChange={(e) => update('s3_uri_r2', e.target.value)}
-              placeholder="s3://bucket/patient/sample_R2.fastq.gz"
+              id="fastq_r2"
+              type="text"
+              value={form.fastq_r2}
+              onChange={(e) => update('fastq_r2', e.target.value)}
+              placeholder={fastqPlaceholder('R2')}
               disabled={disabled || loading}
               className="w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 font-mono text-xs text-slate-900 outline-none transition focus:border-dna-500 focus:ring-2 focus:ring-dna-500/20 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white sm:text-sm"
             />

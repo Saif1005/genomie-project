@@ -1,4 +1,4 @@
-"""Gestionnaire VRAM GPU — g4dn.xlarge (T4 16 Go) avec mutex d'exclusion."""
+"""Gestionnaire VRAM GPU avec mutex d'exclusion (VRAM réelle détectée via nvidia-smi)."""
 
 from __future__ import annotations
 
@@ -6,12 +6,10 @@ import json
 import os
 import subprocess
 import threading
-import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Generator, List, Optional
-from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from loguru import logger
@@ -133,8 +131,6 @@ class GPUManager:
         agent: str,
         phase: str,
         duration_s: Optional[float] = None,
-        s3_inputs: Optional[List[str]] = None,
-        s3_output: Optional[str] = None,
         **extra: Any,
     ) -> Dict[str, Any]:
         """Log structuré JSON à chaque transition d'agent."""
@@ -153,10 +149,6 @@ class GPUManager:
                 "total": vram.get("total_mb"),
             },
         }
-        if s3_inputs:
-            entry["s3_inputs"] = s3_inputs
-        if s3_output:
-            entry["s3_output"] = s3_output
         if extra:
             entry.update(extra)
         logger.info(json.dumps(entry, default=str))
@@ -184,7 +176,7 @@ class GPUManager:
         try:
             with urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
-        except URLError as e:
+        except (OSError, ValueError) as e:  # URLError, timeout, JSON invalide
             logger.warning(f"Ollama indisponible ({url}): {e}")
             return {}
 
@@ -194,7 +186,7 @@ class GPUManager:
             with urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             return [m.get("name", "") for m in data.get("models", []) if m.get("name")]
-        except URLError:
+        except (OSError, ValueError):
             return []
 
     def suspend_ollama_models(self) -> None:
@@ -225,9 +217,18 @@ class GPUManager:
         self.empty_cuda_cache()
         self.log_transition_json("gpu_manager", "PRE_PARABRICKS_READY")
 
+    def _vram_allows_sharing(self) -> bool:
+        """True si la VRAM réelle permet à Ollama (Mistral) et BioGPT de cohabiter."""
+        shared_gb = float(os.getenv("GPU_SHARED_VRAM_GB", "24"))
+        max_mb = max((g["vram_mb"] for g in gpu_inventory()), default=0.0)
+        return max_mb / 1024 >= shared_gb
+
     def prepare_for_biogpt(self) -> None:
         """e) Prépare VRAM pour BioGPT après Parabricks."""
-        self.suspend_ollama_models()
+        if self._vram_allows_sharing():
+            self.log_transition_json("gpu_manager", "OLLAMA_KEPT_VRAM_SUFFICIENT")
+        else:
+            self.suspend_ollama_models()
         self.empty_cuda_cache()
         self.log_transition_json("gpu_manager", "PRE_BIOGPT_READY")
 
@@ -262,6 +263,77 @@ class GPUManager:
             pass
         self.empty_cuda_cache()
         self.log_transition_json("huggingface", "MODEL_UNLOADED")
+
+
+_gpu_inventory_cache: Optional[List[Dict[str, Any]]] = None
+
+
+def gpu_inventory(refresh: bool = False) -> List[Dict[str, Any]]:
+    """GPUs NVIDIA réellement visibles (nvidia-smi) — liste vide si aucun."""
+    global _gpu_inventory_cache
+    if _gpu_inventory_cache is not None and not refresh:
+        return _gpu_inventory_cache
+    gpus: List[Dict[str, Any]] = []
+    try:
+        out = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,compute_cap",
+                "--format=csv,noheader,nounits",
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+        for line in out.strip().splitlines():
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 2:
+                gpus.append(
+                    {
+                        "name": parts[0],
+                        "vram_mb": float(parts[1]),
+                        "compute_cap": parts[2] if len(parts) > 2 else None,
+                    }
+                )
+    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
+        pass
+    _gpu_inventory_cache = gpus
+    return gpus
+
+
+def select_pipeline_backend() -> Dict[str, Any]:
+    """
+    Choisit le moteur FASTQ→VCF selon la VRAM réelle du serveur.
+
+    PIPELINE_BACKEND=auto (défaut) | parabricks | cpu
+    PARABRICKS_MIN_VRAM_GB : VRAM minimale par GPU exigée par Parabricks (16 Go).
+    """
+    from config.settings import parabricks
+
+    requested = os.getenv("PIPELINE_BACKEND", "auto").lower()
+    min_gb = parabricks().min_vram_gb
+    gpus = gpu_inventory()
+    max_vram_gb = max((g["vram_mb"] for g in gpus), default=0.0) / 1024
+    info: Dict[str, Any] = {
+        "requested": requested,
+        "gpus": gpus,
+        "max_vram_gb": round(max_vram_gb, 1),
+        "parabricks_min_vram_gb": min_gb,
+    }
+    if requested == "cpu":
+        info.update(backend="cpu", reason="PIPELINE_BACKEND=cpu")
+    elif requested == "parabricks":
+        info.update(backend="parabricks", reason="PIPELINE_BACKEND=parabricks")
+    elif not gpus:
+        info.update(backend="cpu", reason="Aucun GPU NVIDIA détecté")
+    elif max_vram_gb + 1.0 < min_gb:  # tolérance : une carte « 16 Go » expose 15,0-15,9 Go (ex. 15 360 MiB)
+        info.update(
+            backend="cpu",
+            reason=f"VRAM {max_vram_gb:.1f} Go < {min_gb:.0f} Go requis par Parabricks",
+        )
+    else:
+        info.update(backend="parabricks", reason=f"GPU {gpus[0]['name']} ({max_vram_gb:.1f} Go)")
+    return info
 
 
 class CUDACompatibilityError(RuntimeError):
