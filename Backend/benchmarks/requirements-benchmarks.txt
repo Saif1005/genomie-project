@@ -1,12 +1,7 @@
-﻿# ===================================================================
-# requirements-benchmarks.txt
-# Dependances specifiques aux benchmarks — Zaynb Genomic Backend
-# ===================================================================
-
-# Client HTTP asynchrone + synchrone
+﻿# httpx - client HTTP
 httpx>=0.27.0
 
-# Graphiques pour le rapport HTML
+# Graphiques rapport HTML
 plotly>=5.18.0
 
 # Tests

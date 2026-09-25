@@ -1,6 +1,9 @@
 ﻿"""
-load_test.py — Test de charge concurrent (workers paralleles).
+load_test.py - Test de charge concurrent (workers paralleles).
 
+Usage:
+    python -m benchmarks.load_test
+    python -m benchmarks.load_test --workers 20 --levels 1 5 10 20
 """
 
 from __future__ import annotations
@@ -19,24 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from benchmarks.config import BenchmarkConfig, config as default_config
 from benchmarks.metrics import LatencyStats, RequestResult, compute_stats
-from benchmarks.reporter import BenchmarkReporter
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Paliers de charge (nombre de workers concurrents)
-# ─────────────────────────────────────────────────────────────────────────────
 LOAD_LEVELS = [1, 2, 5, 10, 20, 50]
 
 
-def _worker_request(
-    base_url: str,
-    timeout: float,
-    patient_suffix: int,
-) -> RequestResult:
-    """
-    Une seule requete executee dans un thread independant.
-    Utilise un patient_id unique pour eviter les collisions.
-    """
+def _worker_request(base_url: str, timeout: float, patient_suffix: int) -> RequestResult:
     url = f"{base_url}/api/v1/analyze/vcf"
     payload = {
         "patient_id": f"BENCH-LOAD-{patient_suffix:06d}",
@@ -60,29 +50,14 @@ def _worker_request(
 
 
 def run_load_level(
-    base_url: str,
-    n_workers: int,
-    n_requests: int,
-    timeout: float,
+    base_url: str, n_workers: int, n_requests: int, timeout: float
 ) -> Tuple[List[RequestResult], float]:
-    """
-    Soumet n_requests requetes avec n_workers threads simultanes.
-
-    Returns
-    -------
-    (results, total_duration_s)
-    """
     results: List[RequestResult] = []
     t_start = time.perf_counter()
-
     with ThreadPoolExecutor(max_workers=n_workers) as executor:
-        futures = {
-            executor.submit(_worker_request, base_url, timeout, i): i
-            for i in range(n_requests)
-        }
+        futures = {executor.submit(_worker_request, base_url, timeout, i): i for i in range(n_requests)}
         for future in as_completed(futures):
             results.append(future.result())
-
     total_s = time.perf_counter() - t_start
     return results, total_s
 
@@ -91,34 +66,20 @@ def run_load_test(
     cfg: Optional[BenchmarkConfig] = None,
     load_levels: Optional[List[int]] = None,
 ) -> Dict[int, LatencyStats]:
-    """
-    Execute le test de charge a plusieurs niveaux de concurrence.
-
-    Returns
-    -------
-    Dict[workers -> LatencyStats]
-    """
     cfg = cfg or default_config
     levels = load_levels or LOAD_LEVELS
-
     all_stats: Dict[int, LatencyStats] = {}
 
-    print(f"\n{'═' * 70}")
-    print(f"  TEST DE CHARGE — {cfg.base_url}")
+    print(f"\n{'=' * 70}")
+    print(f"  TEST DE CHARGE  -  {cfg.base_url}")
     print(f"  Endpoint : POST /api/v1/analyze/vcf")
-    print(f"{'═' * 70}")
+    print(f"{'=' * 70}")
 
     for n_workers in levels:
-        n_req = max(n_workers * 3, 10)   # au moins 3 requetes par worker
-        logger.info(f"Niveau de charge : {n_workers} workers / {n_req} requetes")
+        n_req = max(n_workers * 3, 10)
+        logger.info(f"Niveau : {n_workers} workers / {n_req} requetes")
 
-        results, total_s = run_load_level(
-            base_url=cfg.base_url,
-            n_workers=n_workers,
-            n_requests=n_req,
-            timeout=cfg.request_timeout,
-        )
-
+        results, total_s = run_load_level(cfg.base_url, n_workers, n_req, cfg.request_timeout)
         stats = compute_stats(
             endpoint=f"POST /api/v1/analyze/vcf [{n_workers}w]",
             method="POST",
@@ -130,68 +91,41 @@ def run_load_test(
             sla_error_rate_pct=cfg.sla_error_rate_pct,
         )
         all_stats[n_workers] = stats
-
+        badge = "OK" if stats.sla_pass else "KO"
         print(
-            f"\n  Workers={n_workers:3d} | Req={n_req:4d} | "
-            f"p50={stats.median_ms:6.1f}ms | "
-            f"p95={stats.p95_ms:6.1f}ms | "
-            f"p99={stats.p99_ms:6.1f}ms | "
-            f"RPS={stats.throughput_rps:6.2f} | "
-            f"Err={stats.error_rate_pct:.1f}% | "
-            f"{'✅' if stats.sla_pass else '❌'}"
+            f"  Workers={n_workers:3d} | Req={n_req:4d} | "
+            f"p50={stats.median_ms:6.1f}ms | p95={stats.p95_ms:6.1f}ms | "
+            f"p99={stats.p99_ms:6.1f}ms | RPS={stats.throughput_rps:6.2f} | "
+            f"Err={stats.error_rate_pct:.1f}% | [{badge}]"
         )
 
-    _print_scaling_summary(all_stats)
+    print(f"\n{'─' * 70}")
+    print(f"  {'Workers':>8} | {'p50 (ms)':>10} | {'p95 (ms)':>10} | {'p99 (ms)':>10} | {'RPS':>8} | SLA")
+    print(f"  {'─'*8}-+-{'─'*10}-+-{'─'*10}-+-{'─'*10}-+-{'─'*8}-+----")
+    for n_workers, s in sorted(all_stats.items()):
+        print(
+            f"  {n_workers:>8} | {s.median_ms:>10.1f} | {s.p95_ms:>10.1f} | "
+            f"{s.p99_ms:>10.1f} | {s.throughput_rps:>8.2f} | {'OK' if s.sla_pass else 'KO'}"
+        )
+    print(f"{'─' * 70}\n")
     return all_stats
 
 
-def _print_scaling_summary(all_stats: Dict[int, LatencyStats]) -> None:
-    """Affiche le tableau de degradation de latence en fonction de la charge."""
-    print(f"\n{'─' * 70}")
-    print("  SYNTHESE DE SCALABILITE")
-    print(f"{'─' * 70}")
-    print(f"  {'Workers':>8} | {'p50 (ms)':>10} | {'p95 (ms)':>10} | {'p99 (ms)':>10} | {'RPS':>8} | SLA")
-    print(f"  {'─' * 8}─┼─{'─' * 10}─┼─{'─' * 10}─┼─{'─' * 10}─┼─{'─' * 8}─┼────")
-    for n_workers, s in sorted(all_stats.items()):
-        badge = "✅" if s.sla_pass else "❌"
-        print(
-            f"  {n_workers:>8} | {s.median_ms:>10.1f} | {s.p95_ms:>10.1f} | "
-            f"{s.p99_ms:>10.1f} | {s.throughput_rps:>8.2f} | {badge}"
-        )
-    print(f"{'─' * 70}\n")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CLI
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Test de charge concurrent — Zaynb Backend")
+if __name__ == "__main__":
+    p = argparse.ArgumentParser(description="Test de charge - Zaynb Backend")
     p.add_argument("--url", default=None)
-    p.add_argument("--iterations", type=int, default=None)
-    p.add_argument("--levels", nargs="+", type=int, default=None,
-                   help="Paliers de workers. Ex: --levels 1 5 10 20")
+    p.add_argument("--levels", nargs="+", type=int, default=None)
     p.add_argument("--no-report", action="store_true")
     p.add_argument("--output-dir", default=None)
-    return p.parse_args()
-
-
-if __name__ == "__main__":
-    args = _parse_args()
+    args = p.parse_args()
 
     cfg = BenchmarkConfig()
     if args.url:
         cfg.base_url = args.url
-    if args.iterations:
-        cfg.n_iterations = args.iterations
     if args.output_dir:
         cfg.results_dir = args.output_dir
 
-    levels = args.levels or LOAD_LEVELS
-
-    stats_map = run_load_test(cfg, load_levels=levels)
-
+    stats_map = run_load_test(cfg, load_levels=args.levels or LOAD_LEVELS)
     if not args.no_report:
-        stats_list = list(stats_map.values())
-        reporter = BenchmarkReporter(cfg)
-        reporter.save(stats_list, benchmark_type="load")
+        from benchmarks.reporter import BenchmarkReporter
+        BenchmarkReporter(cfg).save(list(stats_map.values()), benchmark_type="load")
