@@ -1,16 +1,16 @@
-"""Configuration du serveur local, lue depuis l'environnement (Backend/.env).
+"""Local server configuration, read from the environment (Backend/.env).
 
-Les réglages sont relus à chaque appel (fonctions, pas de singletons figés à l'import) :
-les tests et le rechargement de .env n'ont pas besoin de redémarrer le processus.
+Settings are re-read on every call (functions, no singletons frozen at import): tests and .env
+reloads do not require restarting the process.
 
-Arborescence sous DATA_ROOT (LOCAL_DATA_ROOT) :
-    reference/hg38/      FASTA, index, known-sites BQSR (GATK Resource Bundle, Broad)
-    reference/clinvar/   ClinVar GRCh38 (NCBI, domaine public)
-    reference/panels/    BED du panel générés automatiquement
-    patients/<ID>/input  FASTQ / VCF déposés
-    patients/<ID>/output BAM, VCF, artefacts JSON, rapports
-    models/              cache HuggingFace, Ollama, données d'entraînement
-    tmp/                 travail, cache des résultats
+Layout under DATA_ROOT (LOCAL_DATA_ROOT):
+    reference/hg38/      FASTA, indexes, BQSR known sites (GATK Resource Bundle, Broad)
+    reference/clinvar/   ClinVar GRCh38 (NCBI, public domain)
+    reference/panels/    automatically generated panel BED files
+    patients/<ID>/input  uploaded FASTQ / VCF files
+    patients/<ID>/output BAM, VCF, JSON artifacts, reports
+    models/              HuggingFace cache, Ollama, training data
+    tmp/                 work files, result cache
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ class Paths:
 
 
 def paths() -> Paths:
-    return Paths(Path(os.getenv("LOCAL_DATA_ROOT", "/data/zaynb")).resolve())
+    return Paths(Path(os.getenv("LOCAL_DATA_ROOT", "/data/germlineiq")).resolve())
 
 
 @dataclass(frozen=True)
@@ -81,7 +81,21 @@ class GATKSettings:
     mark_duplicates: bool
     bqsr: bool
     reference_fasta: Path
-    known_sites: tuple  # known_indels, Mills, dbSNP (seuls les fichiers présents sont utilisés)
+    known_sites: tuple  # known_indels, Mills, dbSNP (only the files present are used)
+
+
+def container_user() -> Optional[str]:
+    """User of the GATK/Parabricks containers (CONTAINER_USER).
+
+    auto (default): uid:gid of the backend process, so that outputs belong to the service account
+    (no root-owned files under LOCAL_DATA_ROOT); root: Docker default; "uid:gid": explicit.
+    """
+    value = os.getenv("CONTAINER_USER", "auto").strip().lower()
+    if value == "root":
+        return None
+    if value == "auto":
+        return f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else None
+    return value
 
 
 def gatk() -> GATKSettings:
@@ -135,6 +149,25 @@ def biogpt() -> BioGPTSettings:
         adapter_path=os.getenv("BIOGPT_ADAPTER_PATH") or None,
         device=os.getenv("LLM_DEVICE", "auto").lower(),
         commentary=_flag("BIOGPT_COMMENTARY", True) and not _flag("SKIP_BIOGPT", False),
+    )
+
+
+@dataclass(frozen=True)
+class BioGPTStatsSettings:
+    enabled: bool
+    adapter_path: str
+
+
+def biogpt_stats() -> BioGPTStatsSettings:
+    """Interpretation of the VCF statistics by the fine-tuned BioGPT (src.llm.stats_model).
+
+    Default adapter: the one promoted by `python -m src.llm.stats_finetune promote` (only after its
+    evaluation passed). Without a promoted adapter, the deterministic reference text is used.
+    """
+    default = paths().models_dir / "biogpt-germlineiq-stats" / "promoted" / "adapter"
+    return BioGPTStatsSettings(
+        enabled=_flag("BIOGPT_STATS_INTERPRETATION", True) and not _flag("SKIP_BIOGPT", False),
+        adapter_path=os.getenv("BIOGPT_STATS_ADAPTER_PATH") or str(default),
     )
 
 

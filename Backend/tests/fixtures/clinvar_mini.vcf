@@ -1,6 +1,6 @@
 ##fileformat=VCFv4.1
 ##fileDate=2026-09-01
-##source=ZAYNB test fixture - sous-ensemble SYNTHETIQUE au format ClinVar (pas des donnees ClinVar reelles)
+##source=GERMLINEIQ test fixture - sous-ensemble SYNTHETIQUE au format ClinVar (pas des donnees ClinVar reelles)
 ##reference=GRCh38
 ##INFO=<ID=CLNSIG,Number=.,Type=String,Description="Aggregate germline classification">
 ##INFO=<ID=CLNREVSTAT,Number=.,Type=String,Description="ClinVar review status">

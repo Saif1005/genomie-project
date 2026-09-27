@@ -1,4 +1,4 @@
-"""API ZAYNB (FastAPI) — point d'entrée : uvicorn app.main:app."""
+"""GermlineIQ API (FastAPI) — entry point: uvicorn app.main:app."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from src import __version__
 def create_app() -> FastAPI:
     setup_logging()
     application = FastAPI(
-        title="ZAYNB Genomic Backend",
+        title="GERMLINEIQ Genomic Backend",
         description=(
-            "Panel héréditaire cancer du sein : appel de variants GATK/Parabricks, annotation ClinVar, "
-            "risque par règles explicites, orchestration multi-agent LangGraph."
+            "Hereditary breast cancer panel: GATK/Parabricks variant calling, ClinVar annotation, "
+            "rule-based risk, LangGraph multi-agent orchestration."
         ),
         version=__version__,
     )

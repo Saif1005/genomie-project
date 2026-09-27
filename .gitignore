@@ -2,7 +2,7 @@
 .env
 .env.*
 .env.example
-# Modèle de configuration serveur local (sans secret) — versionné
+# Local server configuration template (no secret) — versioned
 !Backend/.env.local.example
 *.pem
 *.key
@@ -24,9 +24,9 @@ Frontend/.next/
 *.vcf*
 *.fa
 *.fa.fai
-# VCF synthétique du smoke test (aucune donnée patient)
+# Synthetic smoke-test VCF (no patient data)
 !scripts/testdata/*.vcf
-# Fixtures de test synthétiques (aucune donnée patient)
+# Synthetic test fixtures (no patient data)
 !Backend/tests/fixtures/*.vcf
 
 # OS / IDE

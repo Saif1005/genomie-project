@@ -1,4 +1,4 @@
-"""DataManagerAgent — valide la paire FASTQ et la range dans le stockage patient."""
+"""DataManagerAgent — validates the FASTQ pair and stores it in the patient storage."""
 
 from __future__ import annotations
 
@@ -28,5 +28,5 @@ class DataManagerAgent(BaseAgent):
         try:
             validate_fastq_files(r1, r2)
         except ValidationError as e:
-            raise AgentError(f"FASTQ invalides : {e}") from e
+            raise AgentError(f"Invalid FASTQ files: {e}") from e
         return AgentResult.ok(**{K.FASTQ_R1_URI: self._store(pid, r1), K.FASTQ_R2_URI: self._store(pid, r2)})

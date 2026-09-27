@@ -130,7 +130,7 @@ def _normalize_fastq_path(path: str) -> str:
 
 def resolve_fastq_r2_path(fastq_r1: str, fastq_r2: Optional[str] = None) -> str:
     """
-    Résout le chemin R2 : argument explicite ou dérivation R1→R2 (R1.fastq → R2.fastq).
+    Resolves the R2 path: explicit argument or R1→R2 derivation (R1.fastq → R2.fastq).
     """
     r1 = _normalize_fastq_path(fastq_r1)
     if fastq_r2:
@@ -146,29 +146,29 @@ def resolve_fastq_r2_path(fastq_r1: str, fastq_r2: Optional[str] = None) -> str:
         if old in r1:
             return r1.replace(old, new, 1)
     raise ValidationError(
-        f"fastq_r2 manquant et impossible de dériver depuis R1 ({r1}). "
-        "Fournir --fastq-r2 explicitement."
+        f"fastq_r2 missing and cannot be derived from R1 ({r1}). "
+        "Provide --fastq-r2 explicitly."
     )
 
 
 def validate_fastq_paths_distinct(fastq_r1: str, fastq_r2: str) -> Tuple[str, str]:
     """
-    Valide paired-end : R1 et R2 obligatoires et chemins distincts.
+    Validates paired-end input: R1 and R2 required and distinct paths.
 
     Raises:
-        ValidationError: si R2 absent ou R1 == R2
+        ValidationError: if R2 is missing or R1 == R2
     """
     r1 = _normalize_fastq_path(fastq_r1)
     r2 = _normalize_fastq_path(fastq_r2)
     if not r1:
-        raise ValidationError("fastq_r1 requis")
+        raise ValidationError("fastq_r1 required")
     if not r2:
-        raise ValidationError("fastq_r2 requis (paired-end)")
+        raise ValidationError("fastq_r2 required (paired-end)")
     if r1 == r2:
         raise ValidationError(
-            f"fastq_r1 et fastq_r2 pointent vers le même fichier: {r1}"
+            f"fastq_r1 and fastq_r2 point to the same file: {r1}"
         )
-    logger.debug(f"FASTQ paths distincts: R1={r1} R2={r2}")
+    logger.debug(f"Distinct FASTQ paths: R1={r1} R2={r2}")
     return r1, r2
 
 

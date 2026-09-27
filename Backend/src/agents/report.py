@@ -1,4 +1,4 @@
-"""ReportGeneratorAgent — assemble le rapport clinique JSON et l'archive dans le dossier patient."""
+"""ReportGeneratorAgent — assembles the clinical JSON report and archives it in the patient folder."""
 
 from __future__ import annotations
 
@@ -24,5 +24,5 @@ class ReportGeneratorAgent(BaseAgent):
         )
         uri = write_artifact(pid, f"{report.report_id}.json", report.to_api_dict())
         report.report_path = uri
-        self.logger.info(f"Rapport clinique : {uri}")
+        self.logger.info(f"Clinical report: {uri}")
         return AgentResult.ok(**{K.CLINICAL_REPORT: report.to_api_dict(), K.REPORT_URI: uri})

@@ -1,1 +1,1 @@
-"""Configuration du serveur local : voir config.settings."""
+"""Local server configuration: see config.settings."""

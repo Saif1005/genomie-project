@@ -17,9 +17,9 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Zaynb — Plateforme génomique clinique',
+  title: 'GermlineIQ — Clinical germline genomics',
   description:
-    'Interface clinique pour le pipeline GATK Parabricks, analyse VCF et inférence BioGPT',
+    'Hereditary breast cancer germline analysis: GATK variant calling, ClinVar annotation, deterministic risk rules and verified BioGPT commentary',
 };
 
 export default function RootLayout({
@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${dmSans.variable} ${jetbrains.variable} font-sans antialiased`}
       >

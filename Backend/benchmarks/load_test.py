@@ -1,5 +1,5 @@
 ﻿"""
-load_test.py - Test de charge concurrent (workers paralleles).
+load_test.py - Concurrent load test (parallel workers).
 
 Usage:
     python -m benchmarks.load_test
@@ -30,7 +30,7 @@ def _worker_request(base_url: str, timeout: float, patient_suffix: int) -> Reque
     url = f"{base_url}/api/v1/analyze/vcf"
     payload = {
         "patient_id": f"BENCH-LOAD-{patient_suffix:06d}",
-        "vcf_s3": "s3://zaynb-input/bench/sample.g.vcf.gz",
+        "vcf_s3": "s3://germlineiq-input/bench/sample.g.vcf.gz",
     }
     t0 = time.perf_counter()
     try:
@@ -71,13 +71,13 @@ def run_load_test(
     all_stats: Dict[int, LatencyStats] = {}
 
     print(f"\n{'=' * 70}")
-    print(f"  TEST DE CHARGE  -  {cfg.base_url}")
+    print(f"  LOAD TEST  -  {cfg.base_url}")
     print(f"  Endpoint : POST /api/v1/analyze/vcf")
     print(f"{'=' * 70}")
 
     for n_workers in levels:
         n_req = max(n_workers * 3, 10)
-        logger.info(f"Niveau : {n_workers} workers / {n_req} requetes")
+        logger.info(f"Level: {n_workers} workers / {n_req} requests")
 
         results, total_s = run_load_level(cfg.base_url, n_workers, n_req, cfg.request_timeout)
         stats = compute_stats(
@@ -112,7 +112,7 @@ def run_load_test(
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="Test de charge - Zaynb Backend")
+    p = argparse.ArgumentParser(description="Load test - GermlineIQ backend")
     p.add_argument("--url", default=None)
     p.add_argument("--levels", nargs="+", type=int, default=None)
     p.add_argument("--no-report", action="store_true")

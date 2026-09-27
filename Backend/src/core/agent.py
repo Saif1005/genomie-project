@@ -1,7 +1,7 @@
-"""Contrat commun des agents : une responsabilité, une entrée (contexte), une sortie (AgentResult).
+"""Common agent contract: one responsibility, one input (context), one output (AgentResult).
 
-Un agent ne connaît ni l'orchestrateur ni les autres agents : il lit les clés dont il a besoin
-dans le contexte et renvoie les clés qu'il produit. Le moteur fusionne ces sorties.
+An agent knows neither the orchestrator nor the other agents: it reads the keys it needs from
+the context and returns the keys it produces. The engine merges those outputs.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ class AgentResult:
 
 
 class AgentError(RuntimeError):
-    """Erreur métier attendue : message destiné à l'utilisateur, pas de trace."""
+    """Expected domain error: message meant for the user, no stack trace."""
 
 
 class BaseAgent(ABC):
@@ -54,7 +54,7 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def execute(self, context: Dict[str, Any]) -> AgentResult:
-        """Travail de l'agent ; peut lever AgentError pour un échec métier propre."""
+        """The agent's work; may raise AgentError for a clean domain failure."""
 
     def validate_input(self, context: Dict[str, Any]) -> bool:
         return True
@@ -64,22 +64,22 @@ class BaseAgent(ABC):
         self.status = AgentStatus.RUNNING
         try:
             if not self.validate_input(context):
-                result = AgentResult.fail(f"{self.agent_name} : entrées invalides ou manquantes")
+                result = AgentResult.fail(f"{self.agent_name}: invalid or missing inputs")
             else:
-                self.logger.info(f"{self.agent_name} : démarrage")
+                self.logger.info(f"{self.agent_name}: starting")
                 result = self.execute(context)
         except AgentError as e:
             result = AgentResult.fail(str(e))
-        except Exception as e:  # erreur inattendue : tracée, jamais silencieuse
+        except Exception as e:  # unexpected error: logged, never silent
             self.logger.exception(f"{self.agent_name} : exception")
             result = AgentResult.fail(f"{self.agent_name} : {type(e).__name__}: {e}")
         result.execution_time = time.perf_counter() - start
         self.status = result.status
         self.result = result
         if result.success:
-            self.logger.info(f"{self.agent_name} : terminé en {result.execution_time:.1f}s")
+            self.logger.info(f"{self.agent_name}: completed in {result.execution_time:.1f}s")
         else:
-            self.logger.error(f"{self.agent_name} : échec — {result.error}")
+            self.logger.error(f"{self.agent_name}: failed — {result.error}")
         return result
 
     def get_status(self) -> Dict[str, Any]:

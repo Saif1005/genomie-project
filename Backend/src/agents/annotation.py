@@ -1,4 +1,4 @@
-"""VariantAnnotationAgent — lit le VCF sur les régions du panel et l'annote avec ClinVar."""
+"""VariantAnnotationAgent — reads the VCF over the panel regions and annotates it with ClinVar."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from src.agents._io import patient_output_dir, sha256_file, write_artifact
 from src.core import context as K
 from src.core.agent import AgentError, AgentResult, BaseAgent
 from src.genomics import AnnotationUnavailable, VCFFormatError, build_annotator, get_panel, iter_variants, read_header
+from src.genomics.statistics import summarize_file
 from src.storage import StorageError, get_storage
 
 
@@ -22,7 +23,7 @@ class VariantAnnotationAgent(BaseAgent):
         try:
             vcf = get_storage().fetch(uri, patient_output_dir(pid) / os.path.basename(uri))
         except StorageError as e:
-            raise AgentError(f"VCF inaccessible : {e}") from e
+            raise AgentError(f"VCF not accessible: {e}") from e
 
         panel = get_panel()
         try:
@@ -31,7 +32,7 @@ class VariantAnnotationAgent(BaseAgent):
         except AnnotationUnavailable as e:
             raise AgentError(str(e)) from e
         except (OSError, VCFFormatError) as e:
-            raise AgentError(f"VCF illisible : {e}") from e
+            raise AgentError(f"VCF unreadable: {e}") from e
 
         regions = [(c, s, e) for c, s, e, _ in panel.intervals(padding=panel_padding())]
         entries = []
@@ -40,7 +41,12 @@ class VariantAnnotationAgent(BaseAgent):
                 rec = annotator.annotate(v)
                 entries.append({"variant": v.to_dict(), "clinvar": rec.to_dict() if rec else None})
         except VCFFormatError as e:
-            raise AgentError(f"VCF mal formé : {e}") from e
+            raise AgentError(f"Malformed VCF: {e}") from e
+
+        try:
+            file_summary = summarize_file(iter_variants(vcf))  # whole VCF, streamed
+        except VCFFormatError as e:
+            raise AgentError(f"Malformed VCF: {e}") from e
 
         meta = {
             "source": annotator.name,
@@ -52,8 +58,12 @@ class VariantAnnotationAgent(BaseAgent):
             "annotated": sum(1 for e in entries if e["clinvar"]),
         }
         self.logger.info(
-            f"{meta['variants_read']} allèles lus sur le panel, {meta['annotated']} annotés "
+            f"{meta['variants_read']} alleles read in the panel, {meta['annotated']} annotated "
             f"({meta['source']} {meta['version']})"
         )
-        artifact = write_artifact(pid, "annotated_variants.json", {"patient_id": pid, "annotation": meta, "variants": entries})
+        artifact = write_artifact(
+            pid,
+            "annotated_variants.json",
+            {"patient_id": pid, "annotation": meta, "file_summary": file_summary, "variants": entries},
+        )
         return AgentResult.ok(**{K.ANNOTATED_VARIANTS: artifact, K.ANNOTATION: meta, K.INPUT_SHA256: meta["vcf_sha256"]})

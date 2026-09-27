@@ -1,4 +1,4 @@
-"""Stockage des données patients sur le disque du serveur (LOCAL_DATA_ROOT)."""
+"""Patient data storage on the server disk (LOCAL_DATA_ROOT)."""
 
 from __future__ import annotations
 

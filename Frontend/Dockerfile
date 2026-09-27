@@ -1,8 +1,8 @@
-# Frontend Zaynb — Next.js (standalone)
+# Frontend GermlineIQ — Next.js (standalone)
 # Build-time :
-#   BACKEND_INTERNAL_URL        URL du backend vue par Next.js (proxy /api/v1, /health)
-#   NEXT_PUBLIC_LOCAL_DATA_ROOT racine des données (exemples de chemins affichés)
-#   NEXT_PUBLIC_API_URL         optionnel — appel direct du backend par le navigateur
+#   BACKEND_INTERNAL_URL        backend URL seen by Next.js (proxy /api/v1, /health)
+#   NEXT_PUBLIC_LOCAL_DATA_ROOT data root (fallback for example paths; /health is used when available)
+#   NEXT_PUBLIC_API_URL         optional — direct backend calls from the browser
 
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -17,7 +17,7 @@ RUN mkdir -p public
 
 ARG NEXT_PUBLIC_API_URL=
 ARG BACKEND_INTERNAL_URL=http://backend:8000
-ARG NEXT_PUBLIC_LOCAL_DATA_ROOT=/data/zaynb
+ARG NEXT_PUBLIC_LOCAL_DATA_ROOT=/data/germlineiq
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL \
     NEXT_PUBLIC_LOCAL_DATA_ROOT=$NEXT_PUBLIC_LOCAL_DATA_ROOT

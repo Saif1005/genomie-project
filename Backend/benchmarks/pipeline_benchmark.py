@@ -1,5 +1,6 @@
 ﻿"""
-pipeline_benchmark.py - Mesure bout-en-bout (soumission -> polling -> resultat).
+pipeline_benchmark.py - End-to-end VCF measurement (submission -> polling -> result).
+Superseded by benchmarks.multiagent (clinical, reproducibility and orchestration suites).
 
 Usage:
     python -m benchmarks.pipeline_benchmark --runs 5
@@ -86,13 +87,13 @@ def run_single_pipeline(base_url, patient_id, vcf_s3, timeout=30.0) -> PipelineR
             run.error = "job_id manquant"
             run.total_duration_s = time.perf_counter() - t_total
             return run
-        logger.info(f"Job soumis : {job_id} (soumission: {submit_ms:.1f}ms)")
+        logger.info(f"Job submitted: {job_id} (submission: {submit_ms:.1f}ms)")
         status, n_polls, poll_s = _poll_until_done(client, base_url, job_id)
         run.polling_duration_s = poll_s
         run.final_status = status
         run.n_polls = n_polls
     run.total_duration_s = time.perf_counter() - t_total
-    logger.info(f"Termine : status={status} polls={n_polls} total={run.total_duration_s:.1f}s")
+    logger.info(f"Finished: status={status} polls={n_polls} total={run.total_duration_s:.1f}s")
     return run
 
 
@@ -124,14 +125,14 @@ def run_pipeline_benchmark(cfg: Optional[BenchmarkConfig] = None, n_runs: int = 
         return data[idx] if data else 0.0
 
     print(f"\n{'─' * 60}")
-    print(f"  Succes : {n_success}/{len(runs)}")
-    print(f"  Soumission  : moy={sum(submit_ms)/len(submit_ms):.1f}ms  p95={p95(submit_ms):.1f}ms")
+    print(f"  Success: {n_success}/{len(runs)}")
+    print(f"  Submission: mean={sum(submit_ms)/len(submit_ms):.1f}ms  p95={p95(submit_ms):.1f}ms")
     print(f"  Total pipe  : moy={sum(total_s)/len(total_s):.1f}s   p95={p95(total_s):.1f}s")
     print(f"{'─' * 60}\n")
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="Benchmark pipeline bout-en-bout")
+    p = argparse.ArgumentParser(description="End-to-end pipeline benchmark")
     p.add_argument("--url", default=None)
     p.add_argument("--runs", type=int, default=5)
     args = p.parse_args()

@@ -32,7 +32,7 @@ export default function AssistantChat({
     {
       role: 'assistant',
       content:
-        'Bonjour. Je suis l\'assistant Zaynb (multi-agents). Vous pouvez me demander de lancer une analyse, expliquer le pipeline, ou consulter un job — en langage naturel.',
+        'Hello. I am the GermlineIQ multi-agent assistant. Ask me in natural language to start an analysis, explain the pipeline or check a job.',
     },
   ]);
   const [input, setInput] = useState('');
@@ -97,11 +97,11 @@ export default function AssistantChat({
             const uploadedJobId = await tryLaunchWithFiles(pid);
             if (uploadedJobId) {
               launchedJobId = uploadedJobId;
-              reply = `Fichiers FASTQ attachés détectés — workflow lancé (job ${uploadedJobId}).`;
+              reply = `Attached FASTQ files detected — workflow started (job ${uploadedJobId}).`;
             }
           } catch {
             reply =
-              'Échec du lancement avec les fichiers attachés. Réessayez via l\'onglet Upload.';
+              'Could not start with the attached files. Retry from the Upload tab.';
           }
         }
       }
@@ -138,11 +138,11 @@ export default function AssistantChat({
         </div>
         <div>
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-            Assistant IA multi-agents
+            Multi-agent AI assistant
           </h2>
           <p className="flex items-center gap-1 text-xs text-slate-500">
             <Sparkles className="h-3 w-3 text-dna-500" />
-            Compréhension du langage naturel (Mistral)
+            Natural-language understanding (Mistral)
           </p>
         </div>
       </header>
@@ -173,7 +173,7 @@ export default function AssistantChat({
         {loading && (
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin text-dna-500" />
-            Analyse de votre demande…
+            Analysing your request…
           </div>
         )}
         <div ref={bottomRef} />
@@ -187,7 +187,7 @@ export default function AssistantChat({
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ex. : Lance l'analyse pour PATIENT001…"
+            placeholder="e.g. Run the analysis for PATIENT001…"
             disabled={disabled || loading}
             className="flex-1 rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-dna-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
           />
@@ -201,7 +201,7 @@ export default function AssistantChat({
         </div>
         {pendingR1 && pendingR2 && (
           <p className="mt-2 text-xs text-dna-600 dark:text-dna-400">
-            FASTQ attachés : {pendingR1.name}, {pendingR2.name} — dites « lance l&apos;analyse pour PATIENT… »
+            Attached FASTQ: {pendingR1.name}, {pendingR2.name} — say “run the analysis for PATIENT…”
           </p>
         )}
       </form>

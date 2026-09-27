@@ -1,9 +1,9 @@
-"""Lecture VCF en Python pur (VCF brut ou bgzip), sans dépendance externe.
+"""Pure-Python VCF reader (plain or bgzip VCF), no external dependency.
 
-- Sites multi-alléliques éclatés : un `Variant` par allèle alternatif.
-- Filtrage par régions dès la lecture (panel) : un VCF de génome complet est lu en une passe
-  sans construire d'objet pour les millions de sites hors panel.
-- Annotations VEP (CSQ) / SnpEff (ANN) lues via le format déclaré dans l'en-tête.
+- Multi-allelic sites are split: one `Variant` per alternate allele.
+- Region filtering while reading (panel): a whole-genome VCF is read in one pass without
+  building objects for the millions of sites outside the panel.
+- VEP (CSQ) / SnpEff (ANN) annotations read through the format declared in the header.
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ from src.genomics.variant import Variant, normalize_chrom
 _INFO_HEADER = re.compile(r'##INFO=<ID=([^,]+),Number=([^,]+),.*?Description="([^"]*)"')
 _SKIPPED_ALTS = {"*", "<NON_REF>", "<*>", "."}
 
-Region = Tuple[str, int, int]  # (chr normalisé, début 1-based, fin incluse)
+Region = Tuple[str, int, int]  # (normalised chr, 1-based start, inclusive end)
 
 
 class VCFFormatError(ValueError):
-    """Fichier VCF illisible ou mal formé."""
+    """Unreadable or malformed VCF file."""
 
 
 @dataclass
@@ -75,7 +75,7 @@ def _parse_info(raw: str) -> Dict[str, str]:
 
 
 def _per_allele_info(info: Dict[str, str], header: VCFHeader, alt_index: int) -> Dict[str, str]:
-    """Pour les champs Number=A / R, ne garde que la valeur de l'allèle courant."""
+    """For Number=A / R fields, keep only the value of the current allele."""
     out = dict(info)
     for k, v in info.items():
         number = header.info_number.get(k)
@@ -89,7 +89,7 @@ def _per_allele_info(info: Dict[str, str], header: VCFHeader, alt_index: int) ->
 
 
 def _gene_from_annotations(info: Dict[str, str], header: VCFHeader, alt: str) -> Tuple[Optional[str], Optional[str]]:
-    """(gène, conséquence) depuis CSQ (VEP) ou ANN (SnpEff), pour l'allèle alt."""
+    """(gene, consequence) from CSQ (VEP) or ANN (SnpEff), for the alt allele."""
     for key, fields, gene_col, cons_col in (
         ("CSQ", header.csq_fields, "SYMBOL", "Consequence"),
         ("ANN", header.ann_fields, "Gene_Name", "Annotation"),
@@ -139,7 +139,7 @@ def iter_variants(
     regions: Optional[Sequence[Region]] = None,
     sample: Optional[str] = None,
 ) -> Iterator[Variant]:
-    """Itère les variants (un par allèle alt) ; `regions` restreint la lecture au panel."""
+    """Iterates variants (one per alt allele); `regions` restricts reading to the panel."""
     path = Path(path)
     header = VCFHeader()
     region_map: Optional[Dict[str, List[Tuple[int, int]]]] = None
@@ -164,15 +164,15 @@ def iter_variants(
             if not line.strip():
                 continue
             if not seen_columns:
-                raise VCFFormatError(f"{path}: ligne #CHROM absente avant les données")
+                raise VCFFormatError(f"{path}: #CHROM line missing before the data")
             cols = line.rstrip("\n").split("\t")
             if len(cols) < 8:
-                raise VCFFormatError(f"{path}:{lineno}: {len(cols)} colonnes (8 minimum)")
+                raise VCFFormatError(f"{path}:{lineno}: {len(cols)} columns (8 minimum)")
             chrom = normalize_chrom(cols[0])
             try:
                 pos = int(cols[1])
             except ValueError as e:
-                raise VCFFormatError(f"{path}:{lineno}: POS invalide {cols[1]!r}") from e
+                raise VCFFormatError(f"{path}:{lineno}: invalid POS {cols[1]!r}") from e
             ref = cols[3]
             if region_map is not None and not _in_regions(chrom, pos, pos + len(ref) - 1, region_map):
                 continue
@@ -213,11 +213,11 @@ def read_variants(path: Path, regions: Optional[Sequence[Region]] = None) -> Tup
 
 
 def trim_alleles(pos: int, ref: str, alt: str) -> Tuple[int, str, str]:
-    """Représentation minimale (retire suffixe puis préfixe communs, en gardant 1 base d'ancrage).
+    """Minimal representation (strips the common suffix then prefix, keeping 1 anchor base).
 
-    Permet d'apparier un allèle issu d'un site multi-allélique éclaté (ex. REF=GTT ALT=G,GT)
-    avec l'entrée ClinVar (REF=GT ALT=G). Ne remplace pas une normalisation gauche complète,
-    faite en amont par GATK LeftAlignAndTrimVariants dans le pipeline.
+    Matches an allele from a split multi-allelic site (e.g. REF=GTT ALT=G,GT) with the ClinVar
+    entry (REF=GT ALT=G). Does not replace a full left normalisation, done upstream by GATK
+    LeftAlignAndTrimVariants in the pipeline.
     """
     while len(ref) > 1 and len(alt) > 1 and ref[-1] == alt[-1]:
         ref, alt = ref[:-1], alt[:-1]

@@ -1,18 +1,18 @@
-"""BioGPT — commentaire bibliographique optionnel, jamais décisionnel.
+"""BioGPT — optional literature commentary, never used for decisions.
 
-BioGPT (microsoft/biogpt) est un modèle de complétion entraîné sur des résumés PubMed : il
-n'obéit pas à des consignes et ne peut pas produire un niveau de risque fiable. Le risque est
-donc calculé par src.genomics.risk ; BioGPT complète seulement des phrases d'amorce du type
-« Germline pathogenic variants in BRCA1 are associated with … ».
+BioGPT (microsoft/biogpt) is a completion model trained on PubMed abstracts: it does not follow
+instructions and cannot produce a reliable risk level. Risk is therefore computed by
+src.genomics.risk; BioGPT only completes seed sentences such as
+"Germline pathogenic variants in BRCA1 are associated with …", and every sentence is verified.
 
-Décodage glouton (do_sample=False) : même modèle, même amorce → même texte.
+Greedy decoding (do_sample=False): same model, same seed sentence → same text.
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
@@ -23,7 +23,7 @@ try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     HAS_TORCH = True
-except ImportError:  # pragma: no cover - dépend de l'image
+except ImportError:  # pragma: no cover - depends on the image
     HAS_TORCH = False
     torch = None  # type: ignore[assignment]
 
@@ -32,13 +32,36 @@ class InferenceError(RuntimeError):
     pass
 
 
+GENERATION_CONFIG = {
+    "max_new_tokens": 80,
+    "do_sample": False,
+    "num_beams": 1,
+    "repetition_penalty": 1.3,
+    "no_repeat_ngram_size": 3,
+}
+
+
+def generate_completion(model, tokenizer, prompt: str, device: str, max_new_tokens: int = 80) -> str:
+    """Fixed greedy decoding (production and evaluation share exactly these parameters)."""
+    max_pos = getattr(model.config, "max_position_embeddings", 1024)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=max_pos - max_new_tokens).to(device)
+    with torch.no_grad():
+        out = model.generate(
+            **inputs,
+            **{**GENERATION_CONFIG, "max_new_tokens": max_new_tokens},
+            pad_token_id=tokenizer.eos_token_id,
+        )
+    generated = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    return _clean(f"{prompt} {generated}")
+
+
 def commentary_prompts(genes: List[str]) -> List[str]:
     return [f"Germline pathogenic variants in {g} are associated with" for g in genes]
 
 
 def _clean(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
-    # Coupe à la dernière phrase complète : pas de fragment tronqué dans un rapport
+    # Cut at the last complete sentence: no truncated fragment in a report
     end = max(text.rfind("."), text.rfind(";"))
     return text[: end + 1] if end > 20 else ""
 
@@ -47,13 +70,13 @@ class BioGPTCommentator:
     def __init__(self, base_model: Optional[str] = None, adapter_path: Optional[str] = None, device: Optional[str] = None):
         cfg = biogpt()
         self.base_model = base_model or cfg.model
-        self.adapter_path = adapter_path or cfg.adapter_path  # adaptateur LoRA BioGPT (optionnel)
+        self.adapter_path = adapter_path or cfg.adapter_path  # optional BioGPT LoRA adapter
         requested = (device or cfg.device).lower()
         if HAS_TORCH and requested in ("cuda", "auto"):
             if torch.cuda.is_available():
                 self.device = "cuda"
             else:
-                logger.warning("CUDA indisponible — BioGPT exécuté sur CPU (plus lent)")
+                logger.warning("CUDA unavailable — BioGPT running on CPU (slower)")
                 self.device = "cpu"
         else:
             self.device = "cpu"
@@ -62,21 +85,21 @@ class BioGPTCommentator:
 
     def load(self) -> None:
         if not HAS_TORCH:
-            raise InferenceError("torch/transformers requis pour BioGPT")
+            raise InferenceError("torch/transformers required for BioGPT")
         if self.model is not None:
             return
         torch.manual_seed(0)
         dtype = torch.float16 if self.device == "cuda" else torch.float32
         self.tokenizer = AutoTokenizer.from_pretrained(self.base_model)
-        model = AutoModelForCausalLM.from_pretrained(self.base_model, torch_dtype=dtype).to(self.device)
+        model = AutoModelForCausalLM.from_pretrained(self.base_model, dtype=dtype).to(self.device)
         if self.adapter_path and Path(self.adapter_path).is_dir():
             from peft import PeftModel
 
-            logger.info(f"Adaptateur LoRA : {self.adapter_path}")
+            logger.info(f"LoRA adapter: {self.adapter_path}")
             model = PeftModel.from_pretrained(model, self.adapter_path).merge_and_unload()
         model.eval()
         self.model = model
-        logger.info(f"BioGPT chargé ({self.base_model}, {self.device})")
+        logger.info(f"BioGPT loaded ({self.base_model}, {self.device})")
 
     def unload(self) -> None:
         from src.utils.gpu_manager import get_gpu_manager
@@ -90,23 +113,39 @@ class BioGPTCommentator:
 
     def complete(self, prompt: str, max_new_tokens: int = 80) -> str:
         self.load()
-        max_pos = getattr(self.model.config, "max_position_embeddings", 1024)
-        inputs = self.tokenizer(
-            prompt, return_tensors="pt", truncation=True, max_length=max_pos - max_new_tokens
-        ).to(self.device)
-        with torch.no_grad():
-            out = self.model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                num_beams=1,
-                repetition_penalty=1.3,
-                no_repeat_ngram_size=3,
-                pad_token_id=self.tokenizer.eos_token_id,
-            )
-        generated = self.tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-        return _clean(f"{prompt} {generated}")
+        return generate_completion(self.model, self.tokenizer, prompt, self.device, max_new_tokens)
 
     def comment_on_genes(self, genes: List[str]) -> str:
         sentences = [self.complete(p) for p in commentary_prompts(genes)]
         return " ".join(s for s in sentences if s)
+
+    def verified_commentary(self, genes: List[str], knowledge) -> Tuple[str, Dict[str, Any]]:
+        """Per-gene commentary: BioGPT sentence if verified (src.llm.knowledge), else the fallback sentence.
+
+        No generated sentence enters the report without gene–disease verification.
+        """
+        from src.llm.knowledge import fallback_sentence, verify_text
+        from src.llm.model_evaluator import first_sentence
+
+        per_gene, parts = [], []
+        for gene, prompt in zip(genes, commentary_prompts(genes)):
+            sentence = first_sentence(self.complete(prompt))
+            verdict = verify_text(gene, sentence, knowledge)
+            used = sentence if verdict.verified else fallback_sentence(gene, knowledge)
+            parts.append(used)
+            per_gene.append({
+                **verdict.to_dict(),
+                "used": "biogpt" if verdict.verified else "reference",
+                "final_text": used,
+            })
+        verification = {
+            "method": "verify_text (lexicon + curated ClinGen/NCCN associations)",
+            "knowledge_version": knowledge.version,
+            "clinvar_version": knowledge.clinvar_version,
+            "model": self.base_model,
+            "adapter": self.adapter_path if self.adapter_path and Path(self.adapter_path).is_dir() else None,
+            "generated": len(per_gene),
+            "verified": sum(1 for g in per_gene if g["verified"]),
+            "per_gene": per_gene,
+        }
+        return " ".join(parts), verification

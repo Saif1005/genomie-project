@@ -3,34 +3,34 @@ import type { PipelineStep } from '@/types/api';
 export const FASTQ_PIPELINE_STEPS: PipelineStep[] = [
   {
     id: 'data_manager',
-    label: 'Préparation des données',
-    description: 'Validation des FASTQ R1/R2 sur le serveur',
+    label: 'Data preparation',
+    description: 'Validation of the FASTQ R1/R2 pair on the server',
   },
   {
     id: 'parabricks',
-    label: 'Appel de variants',
+    label: 'Variant calling',
     description:
-      'BWA-MEM → duplicats → BQSR → HaplotypeCaller sur le panel (Parabricks GPU ≥ 16 Go, sinon GATK4 CPU)',
+      'BWA-MEM → MarkDuplicates → BQSR → HaplotypeCaller on the panel, then alignment QC and coverage of known ClinVar pathogenic sites',
   },
   {
     id: 'variant_annotation',
-    label: 'Annotation ClinVar',
-    description: 'Variants du panel annotés avec ClinVar (version tracée)',
+    label: 'ClinVar annotation',
+    description: 'Panel variants annotated with ClinVar (tracked release)',
   },
   {
     id: 'vcf_analysis',
-    label: 'Analyse du panel',
-    description: 'Contrôle qualité clinique et classification (13 gènes germinaux)',
+    label: 'Panel analysis',
+    description: 'Clinical QC, classification of every variant and statistics (Ti/Tv, VAF, DP, expert checks)',
   },
   {
     id: 'prediction',
-    label: 'Interprétation clinique',
-    description: 'Risque par règles explicites ; commentaire BioGPT non décisionnel',
+    label: 'Clinical interpretation',
+    description: 'Risk from deterministic rules; verified BioGPT literature commentary and statistics interpretation',
   },
   {
     id: 'report',
-    label: 'Rapport',
-    description: 'Rapport clinique JSON archivé dans le dossier patient',
+    label: 'Report',
+    description: 'Clinical JSON report archived in the patient folder',
   },
 ];
 
@@ -39,7 +39,7 @@ export function normalizeStepId(step: string): string {
   return step;
 }
 
-/** Étapes affichées : celles du plan renvoyé par l'API, sinon le pipeline FASTQ complet. */
+/** Displayed steps: those of the plan returned by the API, else the full FASTQ pipeline. */
 export function plannedSteps(plan?: string[] | null): PipelineStep[] {
   if (!plan?.length) return FASTQ_PIPELINE_STEPS;
   const ids = plan.map(normalizeStepId);

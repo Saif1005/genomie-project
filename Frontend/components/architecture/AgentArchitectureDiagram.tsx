@@ -197,7 +197,7 @@ export default function AgentArchitectureDiagram() {
         setReady(true);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Erreur rendu Mermaid');
+          setError(err instanceof Error ? err.message : 'Mermaid rendering error');
         }
       }
     })();
@@ -235,14 +235,14 @@ export default function AgentArchitectureDiagram() {
     <section className={styles.root}>
       <div className={styles.header}>
         <div>
-          <div className={styles.title}>Architecture multi-agents — Projet Zaynb</div>
+          <div className={styles.title}>GermlineIQ multi-agent architecture</div>
           <div className={styles.subtitle}>
-            FASTQ → VCF → ClinVar → risque · orchestrateur LangGraph · serveur local
+            FASTQ → VCF → ClinVar → risk · LangGraph orchestrator · local server
           </div>
         </div>
         <div className={styles.controls}>
           <span className={styles.status}>
-            {playing ? 'SESSION EN COURS' : ready ? 'PRÊT' : 'CHARGEMENT…'}
+            {playing ? 'SESSION RUNNING' : ready ? 'READY' : 'LOADING…'}
           </span>
           <button
             type="button"
@@ -250,7 +250,7 @@ export default function AgentArchitectureDiagram() {
             disabled={!ready || playing}
             onClick={runSession}
           >
-            ▶ Démarrer la session
+            ▶ Start the session
           </button>
           <button
             type="button"
@@ -259,13 +259,13 @@ export default function AgentArchitectureDiagram() {
             onClick={reset}
             style={{ background: '#1e293b' }}
           >
-            Réinitialiser
+            Reset
           </button>
         </div>
       </div>
 
       {error && <p className={styles.error}>{error}</p>}
-      {!ready && !error && <p className={styles.loading}>Rendu Mermaid côté client…</p>}
+      {!ready && !error && <p className={styles.loading}>Rendering Mermaid in the browser…</p>}
 
       <div ref={hostRef} className={styles.diagramHost} aria-live="polite" />
 
@@ -273,25 +273,25 @@ export default function AgentArchitectureDiagram() {
         className={`${styles.banner} ${currentStep ? styles.bannerActive : ''}`}
       >
         {currentStep
-          ? `Propagation : ${currentStep.transport} — ${currentStep.dataLabel}`
-          : 'Flèches agents en attente — lancez la session pour voir le flux de données'}
+          ? `Propagation: ${currentStep.transport} — ${currentStep.dataLabel}`
+          : 'Agent arrows idle — start the session to see the data flow'}
       </div>
 
       <div className={styles.legend}>
         <div className={styles.legendItem}>
           <span className={styles.legendSwatchAgent} />
-          Flux agents (stroke-dashoffset animé)
+          Agent flow (animated stroke-dashoffset)
         </div>
         <div className={styles.legendItem}>
           <span className={styles.legendSwatchPipeline} />
-          Pipeline génomique — serveur local
+          Genomic pipeline — local server
         </div>
       </div>
 
       {currentStep && (
         <aside className={styles.sidebar}>
           <div className={styles.sidebarTag}>
-            Étape {stepIndex + 1}/{WORKFLOW_STEPS.length} — {currentStep.tag}
+            Step {stepIndex + 1}/{WORKFLOW_STEPS.length} — {currentStep.tag}
           </div>
           <div className={styles.sidebarTitle}>{currentStep.title}</div>
           <p className={styles.sidebarDesc}>{currentStep.description}</p>

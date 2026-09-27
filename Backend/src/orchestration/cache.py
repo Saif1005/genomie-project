@@ -1,8 +1,8 @@
-"""Cache des résultats d'outils coûteux (appel de variants : minutes sur GPU, heures sur CPU).
+"""Cache of expensive tool results (variant calling: minutes on GPU, hours on CPU).
 
-Clé = empreinte (outil + version + fichiers d'entrée [taille, mtime] + configuration + panel).
-Une entrée n'est valide que si les fichiers qu'elle référence existent toujours.
-Désactivable avec ZAYNB_CACHE=false.
+Key = fingerprint (tool + version + input files [size, mtime] + configuration + panel).
+An entry is only valid while the files it references still exist.
+Disable with GERMLINEIQ_CACHE=false.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class ResultCache:
 
     @classmethod
     def from_env(cls) -> Optional["ResultCache"]:
-        if os.getenv("ZAYNB_CACHE", "true").lower() in ("0", "false", "no"):
+        if os.getenv("GERMLINEIQ_CACHE", "true").lower() in ("0", "false", "no"):
             return None
         from config.settings import paths
 
@@ -71,7 +71,7 @@ class ResultCache:
         except json.JSONDecodeError:
             return None
         if not _paths_exist(produced):
-            logger.info(f"Cache {key[:12]} périmé (fichiers supprimés)")
+            logger.info(f"Cache {key[:12]} stale (files deleted)")
             return None
         return produced
 

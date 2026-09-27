@@ -22,10 +22,10 @@ export default function ClinicalInferenceCard({
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              Inférence clinique
+              Clinical interpretation
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Modèle :{' '}
+              Method:{' '}
               <span className="font-mono font-semibold">{prediction.model}</span>
             </p>
           </div>
@@ -34,7 +34,7 @@ export default function ClinicalInferenceCard({
           className={`rounded-xl border px-4 py-2 text-center ${styles.badge}`}
         >
           <p className="text-[10px] font-bold uppercase tracking-widest">
-            Niveau de risque
+            Risk level
           </p>
           <p className={`text-2xl font-black ${styles.text}`}>
             {prediction.risk_level}
@@ -44,7 +44,7 @@ export default function ClinicalInferenceCard({
 
       <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Conclusion diagnostique
+          Diagnostic conclusion
         </p>
         <p className="mt-2 text-base font-semibold leading-relaxed text-slate-900 dark:text-white">
           {prediction.diagnostic_conclusion}
@@ -54,7 +54,7 @@ export default function ClinicalInferenceCard({
       {prediction.clinical_summary && (
         <div className="mb-5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Synthèse clinique
+            Clinical summary
           </p>
           <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
             {prediction.clinical_summary}
@@ -65,7 +65,7 @@ export default function ClinicalInferenceCard({
       {(prediction.rationale?.length ?? 0) > 0 && (
         <div className="mb-5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Justification ({prediction.decision_method ?? 'règles'})
+            Rationale ({prediction.decision_method ?? 'rules'})
           </p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-300">
             {prediction.rationale!.map((line, i) => (
@@ -78,7 +78,7 @@ export default function ClinicalInferenceCard({
       {prediction.model_commentary && (
         <div className="mb-5 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Commentaire bibliographique {prediction.commentary_model ?? 'BioGPT'} — non décisionnel
+            {prediction.commentary_model ?? 'BioGPT'} literature commentary — not used for decisions
           </p>
           <p className="text-sm italic leading-relaxed text-slate-600 dark:text-slate-400">
             {prediction.model_commentary}
@@ -89,7 +89,7 @@ export default function ClinicalInferenceCard({
       {(prediction.limitations?.length ?? 0) > 0 && (
         <details className="mb-5 text-sm text-slate-600 dark:text-slate-400">
           <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Limites de l&apos;analyse
+            Analysis limitations
           </summary>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {prediction.limitations!.map((line, i) => (
@@ -103,13 +103,13 @@ export default function ClinicalInferenceCard({
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-            Clause de non-responsabilité médicale
+            Medical disclaimer
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
             {prediction.legal_disclaimer}
           </p>
           <p className="mt-2 font-mono text-xs text-slate-500">
-            Statut : {prediction.status}
+            Status: {prediction.status}
           </p>
         </div>
       </div>

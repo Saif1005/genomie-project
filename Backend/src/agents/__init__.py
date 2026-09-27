@@ -1,5 +1,5 @@
-"""Agents métier : un agent = un outil du registre (src.orchestration.registry).
+"""Domain agents: one agent = one tool of the registry (src.orchestration.registry).
 
-Les agents sont importés à la demande par le registre : aucun import ici, pour ne pas
-charger torch, boto3 ou paramiko quand ils ne servent pas.
+Agents are imported on demand by the registry: no imports here, so that torch, boto3 or
+paramiko are not loaded when unused.
 """

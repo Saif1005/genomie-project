@@ -1,8 +1,8 @@
-"""Pipeline germinal FASTQ → VCF filtré, restreint au panel (GPU Parabricks ou CPU GATK4).
+"""Germline FASTQ → filtered VCF pipeline, restricted to the panel (Parabricks GPU or GATK4 CPU).
 
-Reprise sur incident : chaque étape écrit un point de contrôle (empreinte de la commande +
-tailles des sorties). Relancer un job après une coupure reprend à la première étape non faite
-au lieu de refaire des heures d'alignement.
+Crash recovery: each step writes a checkpoint (command fingerprint + output sizes). Relaunching a
+job after an interruption resumes at the first unfinished step instead of redoing hours of
+alignment.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import List, Optional, Sequence
 
 from loguru import logger
 
-from config.settings import gatk, parabricks, paths
+from config.settings import container_user, gatk, parabricks, paths
 from src.pipeline import commands as C
 from src.pipeline.executor import Executor, PipelineError
 from src.pipeline.reference import ReferenceBundle
@@ -54,21 +54,21 @@ class GermlinePipeline:
         threads: Optional[int] = None,
     ):
         if backend not in (BACKEND_GPU, BACKEND_CPU):
-            raise ValueError(f"backend inconnu : {backend}")
+            raise ValueError(f"unknown backend: {backend}")
         self.backend = backend
         self.executor = executor
         self.ref = reference
         self.bed = intervals_bed
         self.threads = threads or int(os.getenv("PIPELINE_THREADS", str(os.cpu_count() or 4)))
 
-    # --- Construction des étapes ---------------------------------------------
+    # --- Building the steps ------------------------------------------------
     def _mounts(self, *files: str) -> List[str]:
         dirs = {str(Path(p).parent) for p in files if p}
         dirs.add(str(paths().data_root))
         return sorted(dirs)
 
     def _gatk(self, script: str, *files: str) -> str:
-        spec = C.DockerSpec(gatk().image, self._mounts(self.ref.fasta, self.bed, *self.ref.known_sites, *files))
+        spec = C.DockerSpec(gatk().image, self._mounts(self.ref.fasta, self.bed, *self.ref.known_sites, *files), user=container_user())
         return spec.run_script(script)
 
     def steps(self, patient_id: str, r1: str, r2: str, out_dir: Path) -> List[Step]:
@@ -91,13 +91,19 @@ class GermlinePipeline:
                 memory_gb=pb_cfg.memory_gb,
                 shm_size=pb_cfg.shm_size,
                 name=f"parabricks-{patient_id}",
+                user=container_user(),
             )
-            fq2bam = C.pbrun_fq2bam(ref, r1, r2, bam, patient_id, known, recal, pb_cfg.low_memory)
-            if not gatk().mark_duplicates:
+            markdup = gatk().mark_duplicates
+            fq2bam = C.pbrun_fq2bam(
+                ref, r1, r2, bam, patient_id, known, recal, pb_cfg.low_memory,
+                duplicate_metrics=f"{out}/duplicate_metrics.txt" if markdup else None,
+                tmp_dir=work,
+            )
+            if not markdup:
                 fq2bam.append("--no-markdups")
             return [
                 Step("fq2bam", pb.run_args(fq2bam), (bam,) + ((recal,) if recal else ())),
-                Step("haplotypecaller", pb.run_args(C.pbrun_haplotypecaller(ref, bam, f"{out}/variants.raw.vcf", self.bed, recal)), (f"{out}/variants.raw.vcf",)),
+                Step("haplotypecaller", pb.run_args(C.pbrun_haplotypecaller(ref, bam, f"{out}/variants.raw.vcf", self.bed, recal, tmp_dir=work)), (f"{out}/variants.raw.vcf",)),
                 post,
             ]
 
@@ -109,13 +115,13 @@ class GermlinePipeline:
         if known:
             steps.append(Step("bqsr", self._gatk(C.base_recalibration(ref, current, bam, f"{work}/recal.table", known), f"{work}/x", f"{out}/x"), (bam,)))
         else:
-            logger.warning("Aucun site connu disponible : BQSR ignoré (qualité d'appel légèrement réduite)")
+            logger.warning("No known-sites resource available: BQSR skipped (slightly reduced call quality)")
             steps.append(Step("finalize_bam", f"mv {C.q(current)} {C.q(bam)} && samtools index {C.q(bam)}", (bam,)))
         steps.append(Step("haplotypecaller", self._gatk(C.haplotype_caller(ref, bam, raw_vcf, self.bed), f"{out}/x"), (raw_vcf,)))
         steps.append(post)
         return steps
 
-    # --- Exécution avec points de contrôle -------------------------------------
+    # --- Execution with checkpoints -------------------------------------------
     @staticmethod
     def _marker(out_dir: Path, step: Step) -> Path:
         return out_dir / ".checkpoints" / f"{step.name}.json"
@@ -130,7 +136,7 @@ class GermlinePipeline:
 
     @staticmethod
     def _signature(step: Step, upstream: str) -> dict:
-        """Commande + empreinte amont (chaînée) + tailles des sorties."""
+        """Command + chained upstream fingerprint + output sizes."""
         return {
             "command_sha256": hashlib.sha256(step.command.encode()).hexdigest(),
             "upstream": upstream,
@@ -155,26 +161,26 @@ class GermlinePipeline:
             raw_vcf=str(out_dir / ("variants.raw.vcf.gz" if self.backend == BACKEND_CPU else "variants.raw.vcf")),
         )
         steps = self.steps(patient_id, r1, r2, out_dir)
-        # Empreinte des entrées : un FASTQ remplacé au même chemin invalide toute la chaîne
+        # Input fingerprint: a FASTQ replaced at the same path invalidates the whole chain
         upstream = self._fingerprint(r1, r2, self.ref.fasta, self.bed, *self.ref.known_sites)
         for i, step in enumerate(steps, 1):
             if self._done(out_dir, step, upstream):
-                logger.info(f"[{self.backend}] {i}/{len(steps)} {step.name} : déjà fait (reprise)")
+                logger.info(f"[{self.backend}] {i}/{len(steps)} {step.name}: already done (resumed)")
                 result.steps_resumed.append(step.name)
                 upstream = hashlib.sha256(self._marker(out_dir, step).read_bytes()).hexdigest()
                 continue
             logger.info(f"[{self.backend}] {i}/{len(steps)} {step.name}…")
             res = self.executor.run(step.command, timeout=step.timeout)
             if res.returncode != 0:
-                raise PipelineError(f"{step.name} a échoué (code {res.returncode}) : {res.stderr[-2000:].strip()}")
+                raise PipelineError(f"{step.name} failed (code {res.returncode}): {res.stderr[-2000:].strip()}")
             missing = [o for o in step.outputs if not Path(o).is_file()]
             if missing:
-                raise PipelineError(f"{step.name} n'a pas produit {missing}")
+                raise PipelineError(f"{step.name} did not produce {missing}")
             marker = self._marker(out_dir, step)
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text(json.dumps(self._signature(step, upstream)))
             upstream = hashlib.sha256(marker.read_bytes()).hexdigest()
             result.steps_run.append(step.name)
 
-        shutil.rmtree(out_dir / "work", ignore_errors=True)  # intermédiaires (BAM bruts, tables)
+        shutil.rmtree(out_dir / "work", ignore_errors=True)  # intermediates (raw BAMs, tables)
         return result

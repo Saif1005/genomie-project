@@ -1,15 +1,15 @@
-"""Construction des commandes GATK / Parabricks (fonctions pures, testables sans exécution).
+"""Building GATK / Parabricks commands (pure functions, testable without execution).
 
-Choix bioinformatiques :
-- BWA-MEM `-K 100000000` : taille de lot fixe → alignement identique quel que soit le nombre de
-  threads (reproductibilité bit à bit) ; `-Y` : soft-clipping des alignements supplémentaires.
-- Alignement → tri en flux (pas de SAM intermédiaire sur disque).
-- BQSR avec tous les sites connus disponibles (known_indels, Mills, dbSNP).
-- HaplotypeCaller restreint aux régions du panel (BED avec marge) : minutes au lieu d'heures.
-- Parabricks : fq2bam fait l'alignement, le marquage des duplicats et la table BQSR en un
-  passage ; haplotypecaller applique la recalibration à la volée (--in-recal-file).
-- Post-traitement commun GPU/CPU : normalisation (alignement à gauche, éclatement des
-  multi-alléliques) puis filtres « hard » GATK séparés SNV / indels.
+Bioinformatics choices:
+- BWA-MEM `-K 100000000`: fixed batch size → identical alignment whatever the number of threads
+  (bit-for-bit reproducibility); `-Y`: soft-clipping of supplementary alignments.
+- Alignment → streamed sort (no intermediate SAM on disk).
+- BQSR with every available known-sites resource (known_indels, Mills, dbSNP).
+- HaplotypeCaller restricted to the panel regions (padded BED): minutes instead of hours.
+- Parabricks: fq2bam performs alignment, duplicate marking and the BQSR table in one pass;
+  haplotypecaller applies the recalibration on the fly (--in-recal-file).
+- Shared GPU/CPU post-processing: normalisation (left alignment, multi-allelic splitting)
+  then GATK "hard" filters, separately for SNVs and indels.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import shlex
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Sequence
 
-# Filtres recommandés par GATK pour un échantillon unique (VQSR impossible sur un panel)
+# GATK-recommended filters for a single sample (VQSR is not possible on a panel)
 SNP_FILTERS = (
     ("SNP_QD2", "QD < 2.0"),
     ("SNP_QUAL30", "QUAL < 30.0"),
@@ -48,11 +48,14 @@ class DockerSpec:
     memory_gb: Optional[int] = None
     shm_size: Optional[str] = None
     name: Optional[str] = None
+    user: Optional[str] = None  # "uid:gid": outputs owned by the service account, not root
 
     def prefix(self) -> List[str]:
         args = ["docker", "run", "--rm"]
         if self.name:
             args += ["--name", self.name]
+        if self.user:
+            args += ["--user", self.user]
         if self.gpus:
             args += ["--gpus", "all"]
         if self.memory_gb:
@@ -111,6 +114,8 @@ def haplotype_caller(ref: str, in_bam: str, out_vcf: str, intervals: str) -> str
 def pbrun_fq2bam(
     ref: str, r1: str, r2: str, out_bam: str, patient_id: str,
     known_sites: Sequence[str], recal_table: Optional[str], low_memory: bool,
+    duplicate_metrics: Optional[str] = None,
+    tmp_dir: Optional[str] = None,
 ) -> List[str]:
     args = [
         "pbrun", "fq2bam", "--ref", ref, "--in-fq", r1, r2, "--out-bam", out_bam,
@@ -121,16 +126,24 @@ def pbrun_fq2bam(
         for s in known_sites:
             args += ["--knownSites", s]
         args += ["--out-recal-file", recal_table]
+    if duplicate_metrics:  # Picard-format metrics, read by the alignment QC (duplication rate)
+        args += ["--out-duplicate-metrics", duplicate_metrics]
     if low_memory:
         args.append("--low-memory")
+    if tmp_dir:  # writable temporary directory (required when the container does not run as root)
+        args += ["--tmp-dir", tmp_dir]
     return args
 
 
-def pbrun_haplotypecaller(ref: str, in_bam: str, out_vcf: str, intervals: str, recal_table: Optional[str]) -> List[str]:
+def pbrun_haplotypecaller(
+    ref: str, in_bam: str, out_vcf: str, intervals: str, recal_table: Optional[str], tmp_dir: Optional[str] = None,
+) -> List[str]:
     args = ["pbrun", "haplotypecaller", "--ref", ref, "--in-bam", in_bam, "--out-variants", out_vcf,
             "--interval-file", intervals]
     if recal_table:
         args += ["--in-recal-file", recal_table]
+    if tmp_dir:
+        args += ["--tmp-dir", tmp_dir]
     return args
 
 

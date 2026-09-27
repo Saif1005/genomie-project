@@ -1,9 +1,9 @@
-"""Panel de gènes (data/cancer_genes/cancer_genes_db.json).
+"""Gene panel (data/cancer_genes/cancer_genes_db.json).
 
-Chaque gène du panel sein porte un rôle :
-  - germline : prédisposition héréditaire, utilisé pour le risque (pénétrance high / moderate)
-  - somatic  : altération tumorale (PIK3CA, ERBB2, MYC) — hors périmètre d'un appel germinal,
-               jamais utilisé pour le risque héréditaire.
+Each breast-panel gene has a role:
+  - germline : hereditary predisposition, used for risk (high / moderate penetrance)
+  - somatic  : tumour alteration (PIK3CA, ERBB2, MYC) — outside the scope of a germline call,
+               never used for hereditary risk.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ _REQUIRED_FIELDS = ("symbol", "name", "chromosome", "start_position", "end_posit
 
 
 class PanelError(ValueError):
-    """Fichier de panel absent ou invalide."""
+    """Panel file missing or invalid."""
 
 
 @dataclass(frozen=True)
@@ -71,21 +71,21 @@ class GenePanel:
         if not p.is_absolute():
             p = (BACKEND_ROOT / p).resolve()
         if not p.is_file():
-            raise PanelError(f"Panel de gènes introuvable : {p}")
+            raise PanelError(f"Gene panel not found: {p}")
         raw_bytes = p.read_bytes()
         try:
             raw = json.loads(raw_bytes)
         except json.JSONDecodeError as e:
-            raise PanelError(f"Panel invalide ({p}) : {e}") from e
+            raise PanelError(f"Invalid panel ({p}): {e}") from e
         if not isinstance(raw, dict) or not raw:
-            raise PanelError(f"Panel vide ou mal formé : {p}")
+            raise PanelError(f"Empty or malformed panel: {p}")
 
         genes: Dict[str, Gene] = {}
         aliases: Dict[str, str] = {}
         for key, info in raw.items():
             missing = [f for f in _REQUIRED_FIELDS if f not in info]
             if missing:
-                raise PanelError(f"Gène {key} : champs manquants {missing}")
+                raise PanelError(f"Gene {key}: missing fields {missing}")
             breast = info.get("breast_panel") or {}
             gene = Gene(
                 symbol=str(info["symbol"]).upper(),
@@ -100,9 +100,9 @@ class GenePanel:
                 aliases=tuple(a.upper() for a in info.get("aliases", [])),
             )
             if gene.start > gene.end:
-                raise PanelError(f"Gène {gene.symbol} : start > end")
+                raise PanelError(f"Gene {gene.symbol}: start > end")
             if gene.is_germline_breast and gene.penetrance not in (PENETRANCE_HIGH, PENETRANCE_MODERATE):
-                raise PanelError(f"Gène {gene.symbol} : pénétrance high|moderate requise")
+                raise PanelError(f"Gene {gene.symbol}: high|moderate penetrance required")
             genes[gene.symbol] = gene
             aliases[key.upper()] = gene.symbol
             for a in gene.aliases:
@@ -128,7 +128,7 @@ class GenePanel:
         return self.get(symbol) is not None
 
     def get_gene_info(self, symbol: str) -> Optional[Dict]:
-        """Compatibilité avec l'ancien CancerGenesDB (dict brut)."""
+        """Compatibility with the former CancerGenesDB (raw dict)."""
         g = self.get(symbol)
         if g is None:
             return None
@@ -150,20 +150,20 @@ class GenePanel:
         return [g for g in self.breast_genes() if g.is_germline_breast]
 
     def gene_at(self, chromosome: str, position: int, genes: Optional[Iterable[Gene]] = None) -> Optional[Gene]:
-        """Premier gène (ordre alphabétique) contenant la position — déterministe."""
+        """First gene (alphabetical order) containing the position — deterministic."""
         for g in sorted(genes if genes is not None else self.genes.values(), key=lambda g: g.symbol):
             if g.contains(chromosome, position):
                 return g
         return None
 
     def intervals(self, padding: int = 0, germline_only: bool = False) -> List[Tuple[str, int, int, str]]:
-        """Intervalles 1-based inclusifs du panel sein, triés, avec marge."""
+        """Sorted, 1-based inclusive intervals of the breast panel, with padding."""
         genes = self.germline_breast_genes() if germline_only else self.breast_genes()
         out = [(g.chromosome, max(1, g.start - padding), g.end + padding, g.symbol) for g in genes]
         return sorted(out, key=lambda t: (chrom_sort_key(t[0]), t[1]))
 
     def write_bed(self, path: os.PathLike, padding: int = 100) -> Path:
-        """BED (0-based, demi-ouvert) pour GATK -L / Parabricks --interval-file."""
+        """BED (0-based, half-open) for GATK -L / Parabricks --interval-file."""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         lines = [f"{c}\t{s - 1}\t{e}\t{name}\n" for c, s, e, name in self.intervals(padding)]

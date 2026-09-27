@@ -1,4 +1,4 @@
-"""Assistant conversationnel — compréhension des prompts humains (Mistral/Ollama)."""
+"""Conversational assistant — understanding human prompts (Mistral via Ollama)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from loguru import logger
 
 from src.llm.ollama_client import OllamaClient
 
-# Chemins serveur vers FASTQ/VCF (ex. /data/zaynb/patients/P1/input/R1.fastq.gz)
+# Server paths to FASTQ/VCF files (e.g. /data/germlineiq/patients/P1/input/R1.fastq.gz)
 _LOCAL_PATH_RE = re.compile(r"(?<![\w:])/[\w.\-/]+\.(?:fastq|fq|vcf)(?:\.gz)?\b", re.IGNORECASE)
 _PATIENT_RE = re.compile(r"\b(PATIENT\d+|[A-Za-z][A-Za-z0-9_\-]{2,31})\b")
 _JOB_RE = re.compile(
@@ -18,15 +18,15 @@ _JOB_RE = re.compile(
     re.IGNORECASE,
 )
 
-ASSISTANT_SYSTEM = """Tu es l'assistant clinique du système multi-agents Zaynb (cancer du sein).
+ASSISTANT_SYSTEM = """You are the clinical assistant of the GermlineIQ multi-agent system (hereditary breast cancer).
 
-Tu comprends le français et l'anglais. Tu aides les cliniciens à :
-- lancer une analyse FASTQ (GATK/Parabricks → annotation ClinVar → risque → rapport)
-- lancer une analyse VCF seule (chemin sur le serveur)
-- expliquer le pipeline et les agents
-- consulter le statut d'un job
+You understand English and French. You help clinicians to:
+- start a FASTQ analysis (GATK/Parabricks → ClinVar annotation → risk → report)
+- start a VCF-only analysis (path on the server)
+- explain the pipeline and the agents
+- check the status of a job
 
-Réponds UNIQUEMENT avec un JSON valide (sans markdown) :
+Reply ONLY with valid JSON (no markdown):
 {
   "intent": "start_fastq|start_vcf|explain_pipeline|job_status|help|chat",
   "patient_id": null,
@@ -34,21 +34,21 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown) :
   "fastq_r2": null,
   "vcf_path": null,
   "job_id": null,
-  "reply": "réponse naturelle courte en français",
+  "reply": "short natural reply in English",
   "missing_fields": []
 }
 
-Règles :
-- start_fastq : patient_id + fastq_r1 + fastq_r2 requis (ou indiquer missing_fields)
-- start_vcf : patient_id + vcf_path requis
-- job_status : extraire job_id UUID si mentionné
-- explain_pipeline / help : pas de lancement
-- reply : ton professionnel, clair, biomédical
+Rules:
+- start_fastq: patient_id + fastq_r1 + fastq_r2 required (otherwise list missing_fields)
+- start_vcf: patient_id + vcf_path required
+- job_status: extract the job_id UUID if mentioned
+- explain_pipeline / help: never start anything
+- reply: professional, clear, biomedical tone
 """
 
 
 class AssistantAgent:
-    """Parse les prompts utilisateur et produit une action structurée."""
+    """Parses user prompts and produces a structured action."""
 
     def __init__(self) -> None:
         self.ollama = OllamaClient()
@@ -76,19 +76,19 @@ class AssistantAgent:
     ) -> Optional[Dict[str, Any]]:
         ctx_lines = []
         if context.get("patient_id"):
-            ctx_lines.append(f"patient_id connu: {context['patient_id']}")
+            ctx_lines.append(f"known patient_id: {context['patient_id']}")
         if context.get("pending_upload"):
-            ctx_lines.append("fichiers FASTQ attachés côté UI (upload direct possible)")
+            ctx_lines.append("FASTQ files attached in the UI (direct upload possible)")
         if context.get("job_id"):
-            ctx_lines.append(f"job actif: {context['job_id']}")
+            ctx_lines.append(f"active job: {context['job_id']}")
 
         hist_text = "\n".join(
             f"{m.get('role', 'user')}: {m.get('content', '')}" for m in history[-6:]
         )
         prompt = (
-            f"Contexte session:\n{chr(10).join(ctx_lines) or 'aucun'}\n\n"
-            f"Historique:\n{hist_text or 'vide'}\n\n"
-            f"Message utilisateur:\n{message}"
+            f"Session context:\n{chr(10).join(ctx_lines) or 'none'}\n\n"
+            f"History:\n{hist_text or 'empty'}\n\n"
+            f"User message:\n{message}"
         )
         raw = self.ollama.generate(prompt, system=ASSISTANT_SYSTEM)
         if not raw.strip():
@@ -201,29 +201,29 @@ class AssistantAgent:
         missing = parsed.get("missing_fields") or []
         if missing:
             labels = {
-                "patient_id": "identifiant patient",
-                "fastq_r1": "FASTQ R1 (chemin serveur ou fichier attaché)",
-                "fastq_r2": "FASTQ R2 (chemin serveur ou fichier attaché)",
-                "vcf_path": "chemin du VCF sur le serveur",
-                "job_id": "identifiant du job (UUID)",
+                "patient_id": "patient identifier",
+                "fastq_r1": "FASTQ R1 (server path or attached file)",
+                "fastq_r2": "FASTQ R2 (server path or attached file)",
+                "vcf_path": "VCF path on the server",
+                "job_id": "job identifier (UUID)",
             }
             need = ", ".join(labels.get(m, m) for m in missing)
-            return f"Pour continuer, j'ai besoin de : {need}."
+            return f"To continue, I need: {need}."
         replies = {
-            "start_fastq": "Je lance l'analyse FASTQ via l'orchestrateur multi-agents.",
-            "start_vcf": "Je lance l'analyse VCF (annotation ClinVar → panel → risque → rapport).",
+            "start_fastq": "Starting the FASTQ analysis through the multi-agent orchestrator.",
+            "start_vcf": "Starting the VCF analysis (ClinVar annotation → panel → risk → report).",
             "explain_pipeline": (
-                "Le pipeline ZAYNB enchaîne : préparation des FASTQ, appel de variants GATK "
-                "(Parabricks sur GPU ou GATK4 sur CPU) restreint au panel, annotation ClinVar, "
-                "contrôle qualité, niveau de risque par règles explicites et rapport clinique. "
-                "BioGPT n'ajoute qu'un commentaire bibliographique, non décisionnel."
+                "The GermlineIQ pipeline chains: FASTQ preparation, GATK variant calling "
+                "(Parabricks on GPU or GATK4 on CPU) restricted to the panel, ClinVar annotation, "
+                "quality control and statistics, rule-based risk level and the clinical report. "
+                "BioGPT only adds a verified literature commentary, never used for decisions."
             ),
             "help": (
-                "Vous pouvez : attacher des FASTQ et lancer l'analyse, saisir des chemins sur le serveur "
-                "(/data/zaynb/patients/<ID>/input/…), ou me demander en langage naturel "
-                "(ex. « Lance PATIENT001 avec /data/zaynb/patients/PATIENT001/input/R1.fastq.gz et R2… »)."
+                "You can: attach FASTQ files and start the analysis, enter server paths "
+                "(/data/germlineiq/patients/<ID>/input/…), or ask me in natural language "
+                "(e.g. \"Run PATIENT001 with /data/germlineiq/patients/PATIENT001/input/R1.fastq.gz and R2…\")."
             ),
-            "job_status": "Je consulte le statut du job.",
-            "chat": "Comment puis-je vous aider pour l'analyse génomique ?",
+            "job_status": "Checking the job status.",
+            "chat": "How can I help with the genomic analysis?",
         }
         return replies.get(intent, replies["chat"])

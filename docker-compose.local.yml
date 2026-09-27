@@ -1,13 +1,13 @@
-# ZAYNB — déploiement sur serveur local (on-premise, accès AnyDesk)
+# GermlineIQ — local server deployment (on-premise, remote access via AnyDesk)
 #
-# Démarrage recommandé : bash scripts/start.sh
-#   (ajoute docker-compose.gpu.yml si un GPU NVIDIA est utilisable par Docker)
+# Recommended start: bash scripts/start.sh
+#   (adds docker-compose.gpu.yml if an NVIDIA GPU is usable by Docker)
 # Manuel : docker compose -f docker-compose.local.yml --env-file Backend/.env up -d --build
 #
-# Sécurité : les ports ne sont publiés que sur BIND_ADDRESS (127.0.0.1 par défaut).
-# Pour ouvrir l'interface au réseau local : BIND_ADDRESS=<IP LAN du serveur> dans Backend/.env.
+# Security: ports are only published on BIND_ADDRESS (127.0.0.1 by default).
+# To open the interface to the local network: BIND_ADDRESS=<server LAN IP> in Backend/.env.
 
-name: zaynb
+name: germlineiq
 
 services:
   ollama:
@@ -16,10 +16,10 @@ services:
     environment:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-0}
     volumes:
-      # Modèles Mistral persistants (voir scripts/pull_models.sh)
-      - ${LOCAL_DATA_ROOT:-/data/zaynb}/models/ollama:/root/.ollama
-    networks: [zaynb]
-    # Pas de port publié : seul le backend parle à Ollama (http://ollama:11434)
+      # Persistent Mistral models (see scripts/pull_models.sh)
+      - ${LOCAL_DATA_ROOT:-/data/germlineiq}/models/ollama:/root/.ollama
+    networks: [germlineiq]
+    # No published port: only the backend talks to Ollama (http://ollama:11434)
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s
@@ -34,23 +34,23 @@ services:
     env_file:
       - ./Backend/.env
     environment:
-      LOCAL_DATA_ROOT: ${LOCAL_DATA_ROOT:-/data/zaynb}
+      LOCAL_DATA_ROOT: ${LOCAL_DATA_ROOT:-/data/germlineiq}
       OLLAMA_HOST: http://ollama:11434
-      HF_HOME: ${LOCAL_DATA_ROOT:-/data/zaynb}/models/huggingface
+      HF_HOME: ${LOCAL_DATA_ROOT:-/data/germlineiq}/models/huggingface
       PYTHONPATH: /app
     volumes:
-      # Même chemin dans le conteneur et sur l'hôte : indispensable car les conteneurs
-      # GATK / Parabricks sont lancés par le démon Docker de l'hôte (docker run -v X:X).
-      - ${LOCAL_DATA_ROOT:-/data/zaynb}:${LOCAL_DATA_ROOT:-/data/zaynb}
-      # ⚠ Donne au backend le contrôle du Docker de l'hôte (équivalent root). Nécessaire
-      #   pour lancer GATK/Parabricks. Ne jamais exposer le backend hors du serveur/LAN.
+      # Same path in the container and on the host: required because the GATK / Parabricks
+      # containers are started by the host Docker daemon (docker run -v X:X).
+      - ${LOCAL_DATA_ROOT:-/data/germlineiq}:${LOCAL_DATA_ROOT:-/data/germlineiq}
+      # ⚠ Gives the backend control of the host Docker (root-equivalent). Required to start
+      #   GATK/Parabricks. Never expose the backend outside the server/LAN.
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
     depends_on:
       ollama:
         condition: service_healthy
-    networks: [zaynb]
+    networks: [germlineiq]
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 30s
@@ -62,17 +62,17 @@ services:
     build:
       context: ./Frontend
       args:
-        # Le navigateur appelle /api/v1 sur le port du frontend ; Next.js relaie ici.
+        # The browser calls /api/v1 on the frontend port; Next.js proxies here.
         BACKEND_INTERNAL_URL: http://backend:8000
-        NEXT_PUBLIC_LOCAL_DATA_ROOT: ${LOCAL_DATA_ROOT:-/data/zaynb}
+        NEXT_PUBLIC_LOCAL_DATA_ROOT: ${LOCAL_DATA_ROOT:-/data/germlineiq}
     restart: unless-stopped
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy
-    networks: [zaynb]
+    networks: [germlineiq]
 
 networks:
-  zaynb:
-    name: zaynb
+  germlineiq:
+    name: germlineiq

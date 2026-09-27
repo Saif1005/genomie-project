@@ -1,4 +1,4 @@
-﻿"""config.py - Configuration centrale des benchmarks."""
+﻿"""config.py - Central configuration of the API latency/load benchmarks."""
 
 from __future__ import annotations
 import os
@@ -24,9 +24,9 @@ class BenchmarkConfig:
         default_factory=lambda: float(os.getenv("BENCH_TIMEOUT", "30.0"))
     )
     test_patient_id: str = "BENCH-PATIENT-001"
-    test_s3_r1: str = "s3://zaynb-input/bench/sample_R1.fastq.gz"
-    test_s3_r2: str = "s3://zaynb-input/bench/sample_R2.fastq.gz"
-    test_vcf_s3: str = "s3://zaynb-input/bench/sample.g.vcf.gz"
+    test_s3_r1: str = "s3://germlineiq-input/bench/sample_R1.fastq.gz"
+    test_s3_r2: str = "s3://germlineiq-input/bench/sample_R2.fastq.gz"
+    test_vcf_s3: str = "s3://germlineiq-input/bench/sample.g.vcf.gz"
     sla_p50_ms: float = field(
         default_factory=lambda: float(os.getenv("BENCH_SLA_P50", "200"))
     )

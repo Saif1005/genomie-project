@@ -1,12 +1,12 @@
-"""Moteur d'orchestration multi-agent (LangGraph).
+"""Multi-agent orchestration engine (LangGraph).
 
-Boucle « planifier → exécuter » :
-  1. plan    : le planificateur recalcule, depuis le contexte courant, les outils encore
-               nécessaires ; le routeur choisit parmi ceux qui sont prêts.
-  2. execute : l'outil choisi tourne (ou plusieurs outils non exclusifs en parallèle), avec
-               gestion VRAM, cache des résultats coûteux, et fusion déterministe du contexte.
-Le graphe s'arrête quand les objectifs sont atteints ou à la première erreur.
-Sans LangGraph installé, la même boucle tourne en Python pur (comportement identique).
+"Plan → execute" loop:
+  1. plan    : the planner recomputes, from the current context, the tools still needed;
+               the router picks among those that are ready.
+  2. execute : the chosen tool runs (or several non-exclusive tools in parallel), with VRAM
+               management, caching of expensive results and deterministic context merging.
+The graph stops when the goals are reached or at the first error.
+Without LangGraph installed, the same loop runs in pure Python (identical behaviour).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ try:
     from langgraph.graph import END, StateGraph
 
     HAS_LANGGRAPH = True
-except ImportError:  # pragma: no cover - dépend de l'installation
+except ImportError:  # pragma: no cover - depends on the installation
     HAS_LANGGRAPH = False
 
 StepCallback = Callable[..., None]  # on_step(ui_step, phase, duration=None)
@@ -72,11 +72,11 @@ class _State(TypedDict, total=False):
     plan: List[str]
     next: List[str]
     error: Optional[str]
-    waived: List[str]  # objectifs abandonnés après l'échec d'un outil non critique
+    waived: List[str]  # goals waived after a non-critical tool failed
 
 
 class _NoGPU:
-    """Gestionnaire GPU neutre (tests, mode VCF sans GPU)."""
+    """Neutral GPU manager (tests, VCF mode without GPU)."""
 
     def __getattr__(self, _name: str) -> Callable[..., None]:
         return lambda *a, **k: None
@@ -114,7 +114,7 @@ class Orchestrator:
             state["plan"] = [t.name for t in self.planner.plan(ctx)]
         except PlanningError as e:
             return RunResult(False, ctx, error=str(e), router=self.router.name)
-        logger.info(f"[Orchestrator] plan initial : {' → '.join(state['plan'])} (routeur {self.router.name})")
+        logger.info(f"[Orchestrator] initial plan: {' → '.join(state['plan'])} (router {self.router.name})")
 
         engine = "langgraph" if HAS_LANGGRAPH else "python"
         if HAS_LANGGRAPH:
@@ -138,14 +138,14 @@ class Orchestrator:
             context=final["ctx"],
             steps=steps,
             plan=final["plan"],
-            error=error if error or success else "Rapport clinique non produit",
+            error=error if error or success else "Clinical report not produced",
             duration=time.perf_counter() - start,
             router=self.router.name,
             engine=engine,
         )
 
     def run_tool(self, name: str, ctx: Dict[str, Any]) -> Tuple[StepRecord, Dict[str, Any]]:
-        """Exécute un seul outil (serveur MCP : tools/call)."""
+        """Runs a single tool (MCP server: tools/call)."""
         return self._run_one(TOOLS_BY_NAME[name], ctx)
 
     # --- Graphe ---------------------------------------------------------------
@@ -174,10 +174,10 @@ class Orchestrator:
             return state  # objectifs atteints
         ready = Planner.ready(remaining, ctx, state["done"])
         if not ready:
-            state["error"] = f"Pipeline bloqué : aucune étape exécutable parmi {[t.name for t in remaining]}"
+            state["error"] = f"Pipeline blocked: no runnable step among {[t.name for t in remaining]}"
             return state
         if len(ready) > 1 and not any(t.exclusive for t in ready):
-            state["next"] = [t.name for t in ready]  # vague parallèle d'outils légers
+            state["next"] = [t.name for t in ready]  # parallel wave of lightweight tools
         else:
             state["next"] = [self.router.choose(ready, ctx, state["done"]).name]
         return state
@@ -201,7 +201,7 @@ class Orchestrator:
             with ThreadPoolExecutor(max_workers=min(self.max_parallel, len(tools))) as pool:
                 outcomes = list(pool.map(lambda t: self._run_one(t, snapshot), tools))
 
-        # Fusion dans l'ordre du registre : résultat indépendant de l'ordre d'exécution
+        # Merge in registry order: the result is independent of execution order
         for record, produced in sorted(outcomes, key=lambda o: list(TOOLS_BY_NAME).index(o[0].tool)):
             state["steps"] = state["steps"] + [record.to_dict()]
             if record.status == "failed":
@@ -209,7 +209,7 @@ class Orchestrator:
                 if tool.critical:
                     state["error"] = state.get("error") or record.error
                 else:
-                    logger.warning(f"[Orchestrator] {tool.name} (non critique) en échec : {record.error}")
+                    logger.warning(f"[Orchestrator] {tool.name} (non-critical) failed: {record.error}")
                     state["waived"] = state.get("waived", []) + list(tool.produces)
                 continue
             ctx.update(produced)
@@ -217,12 +217,12 @@ class Orchestrator:
         state["ctx"] = ctx
         return state
 
-    # --- Exécution d'un outil -------------------------------------------------
+    # --- Running a tool --------------------------------------------------------
     def _notify(self, *args: Any) -> None:
         if self.on_step:
             try:
                 self.on_step(*args)
-            except Exception:  # un callback d'UI ne doit jamais casser le pipeline
+            except Exception:  # a UI callback must never break the pipeline
                 logger.exception("on_step callback")
 
     def _gpu_before(self, tool: ToolSpec) -> None:
@@ -242,7 +242,7 @@ class Orchestrator:
         key = self.cache.key(tool, ctx) if self.cache else None
         cached = self.cache.get(key) if self.cache else None
         if cached is not None:
-            logger.info(f"[Orchestrator] {tool.name} : résultat réutilisé (cache {key[:12]})")
+            logger.info(f"[Orchestrator] {tool.name}: result reused (cache {key[:12]})")
             self._notify(tool.ui_step, "completed", 0.0)
             return StepRecord(tool.name, tool.ui_step, "cached"), cached
 
@@ -256,7 +256,7 @@ class Orchestrator:
 
         missing = [k for k in tool.produces if result.success and result.data.get(k) in (None, "")]
         if result.success and missing:
-            result = AgentResult.fail(f"{tool.name} n'a pas produit {missing}")
+            result = AgentResult.fail(f"{tool.name} did not produce {missing}")
         if not result.success:
             self._notify(tool.ui_step, "failed", duration)
             return StepRecord(tool.name, tool.ui_step, "failed", duration, result.error), {}
@@ -268,5 +268,5 @@ class Orchestrator:
 
 
 def describe_plan(ctx: Dict[str, Any]) -> Sequence[str]:
-    """Plan qui serait exécuté pour ce contexte (API / MCP, sans rien lancer)."""
+    """Plan that would run for this context (API / MCP, without starting anything)."""
     return [t.name for t in Planner().plan(K.validate_initial(dict(ctx)))]

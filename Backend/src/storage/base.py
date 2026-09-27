@@ -1,4 +1,4 @@
-"""Interface commune aux backends de stockage."""
+"""Common interface of the storage backends."""
 
 from __future__ import annotations
 
@@ -7,24 +7,24 @@ from pathlib import Path
 
 
 class StorageError(Exception):
-    """Erreur d'accès au stockage (fichier absent, URI invalide, etc.)."""
+    """Storage access error (missing file, invalid URI, etc.)."""
 
 
 class StorageBackend(ABC):
-    """Les agents manipulent des URIs : chemins absolus sous LOCAL_DATA_ROOT (/data/zaynb/patients/…).
+    """Agents handle URIs: absolute paths under LOCAL_DATA_ROOT (/data/germlineiq/patients/…).
 
-    Interface conservée pour isoler les agents du système de fichiers (tests, futur stockage objet).
+    Interface kept to isolate the agents from the file system (tests, future object storage).
     """
 
     name: str = "abstract"
 
     @abstractmethod
     def validate_input_uri(self, uri: str) -> str:
-        """Valide une URI fournie par l'utilisateur ; retourne sa forme normalisée ou lève ValueError."""
+        """Validates a user-provided URI; returns its normalised form or raises ValueError."""
 
     @abstractmethod
     def is_managed(self, uri: str) -> bool:
-        """True si l'URI est déjà dans le stockage (pas besoin de l'y copier)."""
+        """True if the URI is already in the storage (no need to copy it)."""
 
     @abstractmethod
     def exists(self, uri: str) -> bool:
@@ -32,16 +32,16 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def fetch(self, uri: str, dest: Path) -> str:
-        """Retourne le chemin local à lire (le fichier est lu en place)."""
+        """Returns the local path to read (the file is read in place)."""
 
     @abstractmethod
     def put(self, local_path: str, key: str, area: str = "output", move: bool = False) -> str:
-        """Stocke un fichier local sous `key` ; retourne son URI. area ∈ {input, output}."""
+        """Stores a local file under `key`; returns its URI. area ∈ {input, output}."""
 
     @abstractmethod
     def key_for(self, patient_id: str, area: str, filename: str) -> str:
-        """Clé de stockage d'un fichier patient. area ∈ {input, output, report}."""
+        """Storage key of a patient file. area ∈ {input, output, report}."""
 
     def local_patient_dir(self, patient_id: str, area: str) -> Path | None:
-        """Répertoire local où écrire directement les sorties."""
+        """Local directory where outputs are written directly."""
         return None

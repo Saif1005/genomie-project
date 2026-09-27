@@ -1,11 +1,11 @@
-"""Annotation ClinVar déterministe.
+"""Deterministic ClinVar annotation.
 
-Deux sources, par ordre de priorité :
-  1. ClinVarIndex : VCF ClinVar GRCh38 local (scripts/download_reference.sh), indexé une fois
-     sur les régions du panel puis mis en cache (JSON). Version tracée (fileDate).
-  2. EmbeddedClinVar : champ INFO/CLNSIG déjà présent dans le VCF patient (version inconnue).
-Sans aucune des deux, l'analyse est impossible : on refuse de conclure (AnnotationUnavailable)
-plutôt que de rendre un faux « risque faible ».
+Two sources, in order of priority:
+  1. ClinVarIndex: local ClinVar GRCh38 VCF (scripts/download_reference.sh), indexed once over
+     the panel regions then cached (JSON). Tracked version (fileDate).
+  2. EmbeddedClinVar: INFO/CLNSIG field already present in the patient VCF (unknown version).
+With neither, the analysis is impossible: we refuse to conclude (AnnotationUnavailable) rather
+than return a false "low risk".
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ INDEX_FORMAT_VERSION = 1
 
 
 class AnnotationUnavailable(RuntimeError):
-    """Ni base ClinVar locale ni annotation CLNSIG dans le VCF."""
+    """Neither a local ClinVar release nor CLNSIG annotation in the VCF."""
 
 
 class ClinicalSignificance(str, Enum):
@@ -43,7 +43,7 @@ class ClinicalSignificance(str, Enum):
 
 PATHOGENIC_CLASSES = (ClinicalSignificance.PATHOGENIC, ClinicalSignificance.LIKELY_PATHOGENIC)
 
-# Étoiles ClinVar selon CLNREVSTAT
+# ClinVar review stars from CLNREVSTAT
 _REVIEW_STARS = {
     "practice_guideline": 4,
     "reviewed_by_expert_panel": 3,
@@ -55,7 +55,7 @@ _REVIEW_STARS = {
 
 
 def parse_clnsig(raw: Optional[str]) -> Tuple[ClinicalSignificance, bool]:
-    """CLNSIG brut → (classe, faible pénétrance). L'ordre des tests compte (sous-chaînes)."""
+    """Raw CLNSIG → (class, low penetrance). The order of the tests matters (substrings)."""
     s = (raw or "").strip().lower().replace(" ", "_")
     primary = s.split("|")[0]
     low_penetrance = "low_penetrance" in primary
@@ -152,17 +152,17 @@ class VariantAnnotator(Protocol):
 
 
 class EmbeddedClinVar:
-    """Utilise INFO/CLNSIG du VCF patient (annotation faite en amont, version inconnue)."""
+    """Uses INFO/CLNSIG from the patient VCF (upstream annotation, unknown version)."""
 
     name = "vcf-embedded-clinvar"
-    version = "inconnue"
+    version = "unknown"
 
     def annotate(self, variant: Variant) -> Optional[ClinVarRecord]:
         return record_from_info(variant.info, source=self.name)
 
 
 class ClinVarIndex:
-    """Sous-ensemble ClinVar restreint aux régions du panel, indexé par (chr, pos, ref, alt)."""
+    """ClinVar subset restricted to the panel regions, indexed by (chr, pos, ref, alt)."""
 
     name = "clinvar"
 
@@ -173,6 +173,11 @@ class ClinVarIndex:
 
     def __len__(self) -> int:
         return len(self._records)
+
+    def items(self):
+        """("chr:pos:ref:alt" key, record) sorted by key: deterministic iteration."""
+        for k in sorted(self._records):
+            yield k, ClinVarRecord.from_dict(self._records[k])
 
     @staticmethod
     def _key(chrom: str, pos: int, ref: str, alt: str) -> str:
@@ -215,12 +220,12 @@ class ClinVarIndex:
 
     @classmethod
     def _build(cls, clinvar_vcf: Path, panel: GenePanel, padding: int) -> "ClinVarIndex":
-        logger.info(f"Indexation ClinVar (panel {panel.version}) : {clinvar_vcf} — une seule fois")
+        logger.info(f"Indexing ClinVar (panel {panel.version}): {clinvar_vcf} — once")
         regions: Dict[str, list] = {}
         for c, s, e, _ in panel.intervals(padding=padding):
             regions.setdefault(c, []).append((s, e))
         symbols = {g.symbol for g in panel.breast_genes()}
-        version = "inconnue"
+        version = "unknown"
         records: Dict[str, Dict] = {}
         opener = gzip.open if clinvar_vcf.suffix == ".gz" else open
         with opener(clinvar_vcf, "rt", encoding="utf-8", errors="replace") as fh:
@@ -247,7 +252,7 @@ class ClinVarIndex:
                     if alt in (".", "*"):
                         continue
                     records[cls._key(chrom, pos, cols[3].upper(), alt.upper())] = rec.to_dict()
-        logger.info(f"ClinVar {version} : {len(records)} variants indexés sur le panel")
+        logger.info(f"ClinVar {version}: {len(records)} variants indexed on the panel")
         return cls(records, version, clinvar_vcf)
 
 
@@ -258,24 +263,24 @@ def default_clinvar_path() -> Path:
 
 
 def build_annotator(vcf_has_clnsig: bool, panel: GenePanel, clinvar_vcf: Optional[Path] = None) -> VariantAnnotator:
-    """Base ClinVar locale si présente, sinon CLNSIG du VCF, sinon erreur explicite."""
+    """Local ClinVar release if present, else the VCF CLNSIG, else an explicit error."""
     path = Path(clinvar_vcf) if clinvar_vcf else default_clinvar_path()
     if path.is_file():
         return ClinVarIndex.load(path, panel)
     if vcf_has_clnsig:
         logger.warning(
-            f"Base ClinVar absente ({path}) — utilisation de INFO/CLNSIG du VCF (version non tracée)"
+            f"ClinVar release missing ({path}) — using INFO/CLNSIG from the VCF (untracked version)"
         )
         return EmbeddedClinVar()
     raise AnnotationUnavailable(
-        f"VCF non annoté (pas de INFO/CLNSIG) et base ClinVar absente ({path}). "
-        "Impossible de conclure sans annotation : exécutez "
-        "`bash scripts/download_reference.sh --clinvar-only` puis relancez l'analyse."
+        f"Unannotated VCF (no INFO/CLNSIG) and ClinVar release missing ({path}). "
+        "Cannot conclude without annotation: run "
+        "`bash scripts/download_reference.sh --clinvar-only` and relaunch the analysis."
     )
 
 
 class StoredAnnotator:
-    """Annotations déjà calculées (artefact de l'agent d'annotation), relues à l'identique."""
+    """Already computed annotations (annotation agent artifact), re-read identically."""
 
     def __init__(self, name: str, version: str, records: Dict[Tuple[str, int, str, str], Optional[ClinVarRecord]]):
         self.name = name

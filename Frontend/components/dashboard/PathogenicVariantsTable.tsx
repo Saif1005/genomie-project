@@ -6,21 +6,21 @@ interface PathogenicVariantsTableProps {
   genes?: string[];
   title?: string;
   emptyMessage?: string;
-  /** Variants « à confirmer » : affiche le motif (contrôle qualité ou note) */
+  /** "To confirm" variants: shows the reason (quality control or note) */
   showQcReason?: boolean;
 }
 
-const ZYGOSITY_FR: Record<string, string> = {
-  heterozygous: 'hétéro.',
-  homozygous: 'homo.',
-  hemizygous: 'hémi.',
+const ZYGOSITY_SHORT: Record<string, string> = {
+  heterozygous: 'het',
+  homozygous: 'hom',
+  hemizygous: 'hemi',
 };
 
 export default function PathogenicVariantsTable({
   variants,
   genes,
-  title = 'Variants pathogènes confirmés',
-  emptyMessage = 'Aucun variant pathogène ou probablement pathogène (ClinVar) sur les gènes germinaux du panel.',
+  title = 'Confirmed pathogenic variants',
+  emptyMessage = 'No pathogenic or likely pathogenic variant (ClinVar) in the germline genes of the panel.',
   showQcReason = false,
 }: PathogenicVariantsTableProps) {
   return (
@@ -31,7 +31,7 @@ export default function PathogenicVariantsTable({
         </h2>
         {genes && genes.length > 0 && (
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Gènes identifiés :{' '}
+            Identified genes:{' '}
             <span className="font-mono font-semibold text-dna-700 dark:text-dna-400">
               {genes.join(', ')}
             </span>
@@ -49,15 +49,15 @@ export default function PathogenicVariantsTable({
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800/80">
-                <th className="px-6 py-3">Gène</th>
+                <th className="px-6 py-3">Gene</th>
                 <th className="px-4 py-3">Mutation</th>
                 <th className="px-4 py-3">Locus</th>
                 <th className="px-4 py-3 text-right font-mono">QUAL</th>
                 <th className="px-4 py-3 text-right font-mono">DP</th>
                 <th className="px-4 py-3 text-right font-mono">VAF</th>
-                <th className="px-4 py-3">Zygotie</th>
+                <th className="px-4 py-3">Zygosity</th>
                 <th className="px-4 py-3">ClinVar</th>
-                {showQcReason && <th className="px-4 py-3">Motif</th>}
+                {showQcReason && <th className="px-4 py-3">Reason</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -88,11 +88,11 @@ export default function PathogenicVariantsTable({
                     {fmtVaf(v.gatk_metrics?.VAF)}
                   </td>
                   <td className="px-4 py-3.5 text-xs text-slate-700 dark:text-slate-300">
-                    {ZYGOSITY_FR[v.zygosity ?? ''] ?? '—'}
+                    {ZYGOSITY_SHORT[v.zygosity ?? ''] ?? '—'}
                   </td>
                   <td className="px-4 py-3.5">
                     <span className="rounded-md border border-clinical-high/30 bg-clinical-high/10 px-2 py-0.5 text-xs font-semibold text-clinical-high">
-                      {(v.pathogenicity ?? 'Non classé').replace(/_/g, ' ')}
+                      {(v.pathogenicity ?? 'Unclassified').replace(/_/g, ' ')}
                     </span>
                     {v.review_stars != null && (
                       <span

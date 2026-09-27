@@ -2,12 +2,10 @@
 
 import { Loader2, Play, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import { startAnalysis, validateAnalyzeForm } from '@/lib/api';
+import useSWR from 'swr';
+import { checkHealth, startAnalysis, validateAnalyzeForm } from '@/lib/api';
 import { LOCAL_DATA_ROOT } from '@/lib/deployment';
 import type { AnalyzeRequest } from '@/types/api';
-
-const fastqPlaceholder = (read: 'R1' | 'R2') =>
-  `${LOCAL_DATA_ROOT}/patients/PATIENT001/input/sample_${read}.fastq.gz`;
 
 interface AnalysisFormProps {
   onJobStarted: (jobId: string, patientId: string) => void;
@@ -24,6 +22,10 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
   const [form, setForm] = useState<AnalyzeRequest>(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Example paths use the server's real data root (GET /health), not a build-time guess
+  const { data: health } = useSWR('health', checkHealth);
+  const root = health?.data_root ?? LOCAL_DATA_ROOT;
+  const fastqPlaceholder = (read: 'R1' | 'R2') => `${root}/patients/PATIENT001/input/sample_${read}.fastq.gz`;
 
   const update = (field: keyof AnalyzeRequest, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -57,7 +59,7 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
       setError(
         typeof msg === 'string'
           ? msg
-          : 'Impossible de démarrer l\'analyse. Vérifiez la connexion API.',
+          : 'Could not start the analysis. Check the API connection.',
       );
     } finally {
       setLoading(false);
@@ -73,11 +75,11 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card dark:border-slate-800 dark:bg-slate-900 dark:shadow-card-dark sm:p-8">
       <div className="mb-6">
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-          Nouvelle analyse génomique
+          New genomic analysis
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Lancez le pipeline FASTQ (Parabricks GATK → VCF → BioGPT) via l&apos;orchestrateur
-          multi-agents.
+          Run the FASTQ pipeline (GATK → ClinVar → QC → risk → report) through the multi-agent
+          orchestrator, using files already on the server.
         </p>
       </div>
 
@@ -107,7 +109,7 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
               htmlFor="fastq_r1"
               className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300"
             >
-              FASTQ R1 (chemin serveur) <span className="text-clinical-high">*</span>
+              FASTQ R1 (server path) <span className="text-clinical-high">*</span>
             </label>
             <input
               id="fastq_r1"
@@ -124,7 +126,7 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
               htmlFor="fastq_r2"
               className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300"
             >
-              FASTQ R2 (chemin serveur) <span className="text-clinical-high">*</span>
+              FASTQ R2 (server path) <span className="text-clinical-high">*</span>
             </label>
             <input
               id="fastq_r2"
@@ -156,12 +158,12 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Lancement…
+                Starting…
               </>
             ) : (
               <>
                 <Play className="h-4 w-4" />
-                Lancer l&apos;analyse
+                Run analysis
               </>
             )}
           </button>
@@ -172,7 +174,7 @@ export default function AnalysisForm({ onJobStarted, disabled }: AnalysisFormPro
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
           >
             <RotateCcw className="h-4 w-4" />
-            Réinitialiser
+            Reset
           </button>
         </div>
       </form>

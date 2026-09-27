@@ -19,12 +19,12 @@ class GenomicPromptTemplates:
 Use exactly these labeled lines (no extra prose before or after):
 
 RISK_LEVEL: HIGH | MODERATE | LOW
-DIAGNOSTIC_CONCLUSION: Risque génétique de cancer du sein : ÉLEVÉ | MODÉRÉ | FAIBLE
-CLINICAL_SUMMARY: One formal medical paragraph in French explaining the specific mutation impact (gene, position, DNA repair, inheritance, breast/ovarian risk).
+DIAGNOSTIC_CONCLUSION: Hereditary breast cancer risk: HIGH | MODERATE | LOW
+CLINICAL_SUMMARY: One formal medical paragraph in English explaining the specific mutation impact (gene, position, DNA repair, inheritance, breast/ovarian risk).
 Do not use bullet points. Do not address the reader as "you". Base conclusions only on provided variants."""
 
     PRESCRIPTIVE_SUFFIX = """
-Répondez UNIQUEMENT avec les trois lignes étiquetées :
+Reply ONLY with the three labelled lines:
 RISK_LEVEL:
 DIAGNOSTIC_CONCLUSION:
 CLINICAL_SUMMARY:"""
@@ -138,8 +138,8 @@ CLINICAL_SUMMARY:"""
 
         prompt_parts.append("\n" + "-" * 50)
         prompt_parts.append(
-            "Analyse clinique prescriptive du panel cancer du sein. "
-            "Variants pathogènes uniquement."
+            "Prescriptive clinical analysis of the breast cancer panel. "
+            "Pathogenic variants only."
         )
         prompt_parts.append(GenomicPromptTemplates.PRESCRIPTIVE_SUFFIX)
 

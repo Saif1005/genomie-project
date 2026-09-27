@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Arrête ZAYNB. Les données (LOCAL_DATA_ROOT) et les modèles sont conservés.
+# Stops GermlineIQ. Data (LOCAL_DATA_ROOT) and models are kept.
 # Usage : bash scripts/stop.sh
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -8,6 +8,6 @@ set -euo pipefail
 ensure_env_file
 load_env
 compose down
-# Conteneurs de calcul lancés par le backend (au cas où un job a été interrompu)
+# Compute containers started by the backend (in case a job was interrupted)
 docker ps -aq --filter name=parabricks- | xargs -r docker rm -f >/dev/null
-info "ZAYNB arrêté (données conservées dans $LOCAL_DATA_ROOT)."
+info "GermlineIQ stopped (data kept in $LOCAL_DATA_ROOT)."

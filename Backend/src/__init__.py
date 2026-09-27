@@ -1,3 +1,3 @@
-"""ZAYNB — plateforme génomique clinique multi-agent (panel héréditaire cancer du sein)."""
+"""GermlineIQ — multi-agent clinical genomics platform (hereditary breast cancer panel)."""
 
 __version__ = "3.0.0"

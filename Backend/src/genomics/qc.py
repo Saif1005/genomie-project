@@ -1,7 +1,7 @@
-"""Contrôle qualité clinique d'un appel germinal.
+"""Clinical quality control of a germline call.
 
-Un variant pathogène n'est « confirmé » que s'il passe tous les critères ; sinon il est rapporté
-comme « à confirmer » (Sanger / seconde technique) et rend la conclusion INDETERMINATE.
+A pathogenic variant is only "confirmed" if it passes every criterion; otherwise it is reported
+as "to confirm" (Sanger / orthogonal method) and makes the conclusion INDETERMINATE.
 """
 
 from __future__ import annotations
@@ -57,23 +57,23 @@ def assess(variant: Variant, t: QCThresholds) -> QCResult:
     if variant.filter_status not in ("PASS", "."):
         flags.append(f"FILTER:{variant.filter_status}")
     if variant.quality is None:
-        flags.append("QUAL_ABSENTE")
+        flags.append("QUAL_MISSING")
     elif variant.quality < t.min_qual:
         flags.append(f"QUAL<{t.min_qual:g}")
 
     depth, vaf, zyg = variant.depth, variant.vaf, variant.zygosity
     if depth is None:
-        flags.append("PROFONDEUR_ABSENTE")
+        flags.append("DP_MISSING")
     elif depth < t.min_depth:
         flags.append(f"DP<{t.min_depth}")
 
     if vaf is None:
-        flags.append("VAF_ABSENTE")
+        flags.append("VAF_MISSING")
     elif zyg == "homozygous" or zyg == "hemizygous":
         if vaf < t.hom_vaf_min:
-            flags.append("VAF_INCOHERENTE_HOMOZYGOTE")
+            flags.append("VAF_INCONSISTENT_HOMOZYGOUS")
     elif not (t.het_vaf_min <= vaf <= t.het_vaf_max):
-        # VAF basse : mosaïcisme ou hématopoïèse clonale (CHIP, fréquent pour TP53/CHEK2/ATM)
-        flags.append("VAF_HORS_PLAGE_GERMINALE" if vaf > t.het_vaf_max else "VAF_BASSE_MOSAIQUE_OU_CHIP")
+        # Low VAF: mosaicism or clonal haematopoiesis (CHIP, frequent for TP53/CHEK2/ATM)
+        flags.append("VAF_ABOVE_GERMLINE_RANGE" if vaf > t.het_vaf_max else "LOW_VAF_MOSAIC_OR_CHIP")
 
     return QCResult(status=PASS if not flags else LOW_CONFIDENCE, flags=tuple(flags))

@@ -1,4 +1,4 @@
-"""Stockage des données patients sur le serveur local."""
+"""Patient data storage on the local server."""
 
 from src.storage.base import StorageBackend, StorageError
 from src.storage.factory import get_storage

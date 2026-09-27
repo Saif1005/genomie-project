@@ -8,7 +8,7 @@ export default function ArchitecturePage() {
           Architecture
         </p>
         <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
-          Diagramme multi-agents
+          Multi-agent system
         </h1>
       </header>
       <AnimatedArchitecture />

@@ -1,4 +1,4 @@
-"""Modèle de variant (un allèle alternatif par objet — les sites multi-alléliques sont éclatés)."""
+"""Variant model (one alternate allele per object — multi-allelic sites are split)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _CHROM_ORDER = {str(i): i for i in range(1, 23)} | {"X": 23, "Y": 24, "M": 25, "MT": 25}
 
-# Champs INFO de fréquence en population (jamais INFO/AF de GATK : fréquence dans l'échantillon)
+# Population frequency INFO fields (never GATK INFO/AF: that is the in-sample frequency)
 POPULATION_AF_KEYS = ("gnomAD_AF", "gnomADg_AF", "gnomADe_AF", "gnomad_AF", "AF_popmax", "MAX_AF")
 
 
@@ -50,14 +50,14 @@ class Variant:
     alt_index: int = 1
     gene: Optional[str] = None
     consequence: Optional[str] = None
-    clinvar: Optional[str] = None  # CLNSIG brut, s'il est présent
+    clinvar: Optional[str] = None  # raw CLNSIG, if present
 
     def __post_init__(self) -> None:
         self.chromosome = normalize_chrom(self.chromosome)
         self.ref = self.ref.upper()
         self.alt = self.alt.upper()
 
-    # --- Identité -------------------------------------------------------------
+    # --- Identity -------------------------------------------------------------
     @property
     def key(self) -> Tuple[str, int, str, str]:
         return (self.chromosome, self.position, self.ref, self.alt)
@@ -76,7 +76,7 @@ class Variant:
             return "Insertion"
         return "Complex"
 
-    # --- Génotype et métriques (FORMAT de l'échantillon) ----------------------
+    # --- Genotype and metrics (sample FORMAT) -------------------------------
     @property
     def genotype(self) -> Optional[str]:
         gt = self.format_data.get("GT")
@@ -93,7 +93,7 @@ class Variant:
 
     @property
     def is_called(self) -> bool:
-        """L'échantillon porte-t-il cet allèle ? (vrai si GT absent : VCF sans génotype)."""
+        """Does the sample carry this allele? (true if GT is absent: sites-only VCF)."""
         alleles = self._gt_alleles()
         if not alleles:
             return True
@@ -128,7 +128,7 @@ class Variant:
 
     @property
     def vaf(self) -> Optional[float]:
-        """Fraction allélique de CET allèle : AD[alt]/somme(AD), sinon FORMAT/AF."""
+        """Allele fraction of THIS allele: AD[alt]/sum(AD), else FORMAT/AF."""
         ad = self._allele_depths()
         if len(ad) > self.alt_index and sum(ad) > 0:
             return ad[self.alt_index] / sum(ad)
@@ -160,7 +160,7 @@ class Variant:
         sig, _ = parse_clnsig(self.clinvar)
         return sig in (ClinicalSignificance.PATHOGENIC, ClinicalSignificance.LIKELY_PATHOGENIC)
 
-    # --- Sérialisation (transfert entre agents) --------------------------------
+    # --- Serialisation (transfer between agents) --------------------------------
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 

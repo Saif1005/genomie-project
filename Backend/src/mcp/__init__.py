@@ -1,1 +1,1 @@
-"""Serveur MCP (Model Context Protocol) exposant les agents ZAYNB comme outils."""
+"""MCP (Model Context Protocol) server exposing the GermlineIQ agents as tools."""

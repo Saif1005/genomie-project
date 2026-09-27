@@ -1,7 +1,7 @@
-"""Domaine scientifique : panel de gènes, lecture VCF, annotation ClinVar, QC et risque.
+"""Scientific domain: gene panel, VCF reading, ClinVar annotation, QC and risk.
 
-Code pur et déterministe (aucun appel réseau, aucun modèle de langage) : mêmes entrées,
-même résultat. Les agents ne font qu'orchestrer ces fonctions.
+Pure, deterministic code (no network call, no language model): same inputs, same result.
+The agents only orchestrate these functions.
 """
 
 from src.genomics.analysis import Finding, PanelAnalysis, analyze_panel, to_vcf_metrics

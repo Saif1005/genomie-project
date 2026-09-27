@@ -1,4 +1,4 @@
-"""Configuration commune des tests : environnement isolé, aucune dépendance réseau ou GPU."""
+"""Shared test configuration: isolated environment, no network or GPU dependency."""
 
 from pathlib import Path
 
@@ -9,7 +9,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 @pytest.fixture(autouse=True)
 def _isolated_env(tmp_path, monkeypatch):
-    """Chaque test tourne en mode local sur une racine de données temporaire."""
+    """Each test runs in local mode on a temporary data root."""
     monkeypatch.setenv("DEPLOYMENT_MODE", "local")
     monkeypatch.setenv("LOCAL_DATA_ROOT", str(tmp_path / "data"))
     monkeypatch.setenv("CLINVAR_VCF", str(tmp_path / "data" / "reference" / "clinvar" / "absent.vcf.gz"))

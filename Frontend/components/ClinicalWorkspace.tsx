@@ -43,15 +43,30 @@ export default function ClinicalWorkspace() {
     <div className="space-y-8">
       <section>
         <p className="text-sm font-medium text-dna-600 dark:text-dna-400">
-          Système multi-agents · Assistant IA · Upload FASTQ
+          Multi-agent orchestration · GATK4 · ClinVar · verified BioGPT
         </p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-          Plateforme génomique Zaynb
+          Hereditary breast cancer germline analysis
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-          Attachez vos FASTQ, parlez à l&apos;assistant en langage naturel, ou saisissez des chemins sur le serveur.
-          L&apos;orchestrateur enchaîne Parabricks GATK, analyse VCF et inférence BioGPT.
+          From raw sequencing reads to a clinical report: GATK alignment and variant calling, traceable ClinVar annotation,
+          deterministic quality control and statistics, and a risk level from explicit rules. BioGPT never decides: it writes a
+          literature commentary and, fine-tuned on VCF statistics, an interpretation of each analysis — both verified sentence by sentence.
         </p>
+        <ul className="mt-4 grid max-w-4xl gap-2 text-xs text-slate-600 dark:text-slate-400 sm:grid-cols-3">
+          <li className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+            <span className="block font-semibold text-slate-900 dark:text-white">Deterministic</span>
+            Same FASTQ, same configuration → same VCF, same statistics, same conclusion.
+          </li>
+          <li className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+            <span className="block font-semibold text-slate-900 dark:text-white">Verifiable</span>
+            Every agent archives its JSON artifact; ClinVar, panel and threshold versions are written into the report.
+          </li>
+          <li className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+            <span className="block font-semibold text-slate-900 dark:text-white">Conservative</span>
+            A pathogenic variant below quality thresholds is reported “to confirm”; poor coverage never yields a false “low risk”.
+          </li>
+        </ul>
       </section>
 
       {!activeJobId && (
@@ -72,13 +87,13 @@ export default function ClinicalWorkspace() {
                 active={inputTab === 'upload'}
                 onClick={() => setInputTab('upload')}
               >
-                Fichiers FASTQ
+                Upload FASTQ
               </TabButton>
               <TabButton
                 active={inputTab === 's3'}
                 onClick={() => setInputTab('s3')}
               >
-                Chemins serveur
+                Server paths
               </TabButton>
             </div>
 
@@ -101,7 +116,7 @@ export default function ClinicalWorkspace() {
         <>
           <ExecutionMonitor jobId={activeJobId} job={job} isLoading={isLoading} />
 
-          {showDashboard && <ClinicalDashboard report={job.result!} />}
+          {showDashboard && <ClinicalDashboard report={job.result!} job={job} />}
 
           {(job?.status === 'completed' || job?.status === 'failed') && (
             <div className="flex justify-center pt-2">
@@ -110,7 +125,7 @@ export default function ClinicalWorkspace() {
                 onClick={handleNewAnalysis}
                 className="rounded-lg border border-dna-500/40 bg-dna-500/10 px-5 py-2.5 text-sm font-semibold text-dna-700 dark:text-dna-400"
               >
-                Nouvelle analyse
+                New analysis
               </button>
             </div>
           )}
@@ -119,7 +134,7 @@ export default function ClinicalWorkspace() {
 
       {isRunning && (
         <p className="text-center text-xs text-slate-500 animate-pulseDNA">
-          Polling actif — mise à jour toutes les 4 secondes
+          Live tracking — refreshed every 4 seconds
         </p>
       )}
     </div>

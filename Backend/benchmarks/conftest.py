@@ -1,9 +1,10 @@
-﻿"""conftest.py - Fixtures pytest pour les benchmarks."""
+﻿"""conftest.py - pytest fixtures for the benchmarks."""
 
 from __future__ import annotations
 import sys
 from pathlib import Path
 import pytest
+
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from benchmarks.config import BenchmarkConfig
@@ -15,6 +16,7 @@ def bench_config() -> BenchmarkConfig:
     cfg.n_iterations = 20
     cfg.n_warmup = 3
     return cfg
+
 
 
 @pytest.fixture(scope="session")

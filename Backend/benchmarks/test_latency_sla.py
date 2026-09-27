@@ -1,5 +1,5 @@
 ﻿"""
-test_latency_sla.py - Tests pytest avec assertion SLA.
+test_latency_sla.py - pytest tests with SLA assertions.
 
 Usage:
     pytest benchmarks/test_latency_sla.py -v
