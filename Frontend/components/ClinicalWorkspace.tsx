@@ -50,8 +50,8 @@ export default function ClinicalWorkspace() {
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
           From raw sequencing reads to a clinical report: GATK alignment and variant calling, traceable ClinVar annotation,
-          deterministic quality control and statistics, and a risk level from explicit rules. BioGPT only writes a literature
-          commentary, verified sentence by sentence.
+          deterministic quality control and statistics, and a risk level from explicit rules. BioGPT never decides: it writes a
+          literature commentary and, fine-tuned on VCF statistics, an interpretation of each analysis — both verified sentence by sentence.
         </p>
         <ul className="mt-4 grid max-w-4xl gap-2 text-xs text-slate-600 dark:text-slate-400 sm:grid-cols-3">
           <li className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-800 dark:bg-slate-900/60">

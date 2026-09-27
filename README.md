@@ -13,6 +13,10 @@ a verified BioGPT literature commentary and a clinical web interface.
 Installation and operation: **[DEPLOY_LOCAL.md](DEPLOY_LOCAL.md)** · Detailed architecture:
 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
+**Demonstration & validation report (PDF, 45 pages):** [docs/GermlineIQ_Demo_Validation_Report.pdf](docs/GermlineIQ_Demo_Validation_Report.pdf) —
+screenshots of every screen, technical description of each tool, benchmarks, biological interpretation of the
+findings and research contributions.
+
 ---
 
 ## What the system does
@@ -173,7 +177,7 @@ Measured with `python -m benchmarks.multiagent --suites all` on the delivery ser
 | HG01112 | none (control) | LOW → **LOW** |
 
 - Carrier sensitivity 5/5, control specificity 2/2, risk-level accuracy 7/7 (n = 7: 95 % CI 65–100 %).
-- 0 unexpected confirmed pathogenic calls. One low-VAF TP53 p.R248Q call (5/36 reads) in NA10842 —
+- 0 unexpected confirmed pathogenic calls. One low-VAF TP53 p.Arg273His call (c.818G>A, rs28934576; 5/36 reads) in NA10842 —
   absent from the germline call set, typical of a culture-acquired or clonal-haematopoiesis mutation in
   cell-line DNA — was correctly reported "to confirm", not as a germline finding.
 - End-to-end FASTQ → report: median 99 s per sample (≈ 150k read pairs, Parabricks GPU; 93 s with GATK4

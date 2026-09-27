@@ -25,7 +25,7 @@ export const FASTQ_PIPELINE_STEPS: PipelineStep[] = [
   {
     id: 'prediction',
     label: 'Clinical interpretation',
-    description: 'Risk from deterministic rules; BioGPT commentary verified against reference associations',
+    description: 'Risk from deterministic rules; verified BioGPT literature commentary and statistics interpretation',
   },
   {
     id: 'report',

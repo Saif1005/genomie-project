@@ -63,7 +63,13 @@ def main() -> int:
     out = args.output_dir.expanduser()
     stats = json.loads((out / "vcf_statistics.json").read_text())
     report = json.loads(sorted(out.glob("REP-*.json"))[-1].read_text())
-    vcf = out / "variants.vcf.gz"
+    # Files actually used by the report: variant calling may have been reused from another analysis
+    # of the same FASTQ files (result cache) — the report records the BAM it used.
+    used_bam = (stats.get("alignment") or {}).get("bam")
+    src = Path(used_bam).parent if used_bam else out
+    if src != out:
+        print(f"Note: variant calling reused from {src} (result cache) — verifying the files the report used")
+    vcf = src / "variants.vcf.gz"
     if not vcf.is_file():  # VCF mode: file provided by the user
         ann = json.loads((out / "annotated_variants.json").read_text())["annotation"]
         candidates = [p for d in (out, out.parent / "input") for p in sorted(d.glob("*.vcf*")) if not p.name.endswith((".tbi", ".csi"))]
@@ -133,14 +139,14 @@ def main() -> int:
 
     # --- Alignment (samtools / Picard) ---------------------------------------------
     aln = stats.get("alignment")
-    bam = out / "aligned.bam"
+    bam = src / "aligned.bam"
     if aln and bam.is_file():
         fs = sh(f"samtools flagstat -@ 4 {bam}").splitlines()
         total = int(fs[0].split()[0])
         mapped = int(next(l for l in fs if " mapped (" in l and "primary" not in l).split()[0])
         check("Total reads", aln["total_reads"], total, note="samtools flagstat")
         check("Mapping rate", aln["mapped_rate"], round(mapped / total, 4), tol=1e-4)
-        dup = sh(f"awk -F'\\t' '/^LIBRARY/{{getline; print $9}}' {out}/duplicate_metrics.txt").strip()
+        dup = sh(f"awk -F'\\t' '/^LIBRARY/{{getline; print $9}}' {src}/duplicate_metrics.txt").strip()
         check("Duplicate rate (Picard)", aln["duplication_rate"], round(float(dup), 4), tol=1e-4, note="awk on duplicate_metrics.txt")
 
         # --- Coverage of ClinVar P/LP sites (independent bcftools + awk chain) ---

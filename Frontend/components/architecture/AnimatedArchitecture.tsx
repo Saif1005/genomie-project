@@ -312,7 +312,7 @@ export default function AnimatedArchitecture() {
           </div>
           <div className={styles.legendItem}>
             <span className={styles.legendSwatchValidation} />
-            Validation orchestrateur (ambre)
+            Orchestrator validation (amber)
           </div>
         </div>
       )}

@@ -141,7 +141,7 @@ export default function BenchmarksPage() {
       {s.clinical?.samples && (
         <Section
           title="Clinical accuracy — real 1000 Genomes cohort"
-          subtitle={`${s.clinical.cohort}. Real Illumina reads over the 13 panel genes, full FASTQ → report pipeline. Ground truth: independent bcftools scan of the 1000 Genomes germline calls against ClinVar P/LP. n = ${clin.samples}: confidence intervals are wide by design. The TP53 p.R248Q call in NA10842 (5/36 reads, VAF 0.14) is absent from the germline call set: a low-VAF hotspot in lymphoblastoid-cell-line DNA is typical of a culture-acquired or clonal-haematopoiesis mutation, and GermlineIQ correctly reports it “to confirm” rather than as a germline finding.`}
+          subtitle={`${s.clinical.cohort}. Real Illumina reads over the 13 panel genes, full FASTQ → report pipeline. Ground truth: independent bcftools scan of the 1000 Genomes germline calls against ClinVar P/LP. n = ${clin.samples}: confidence intervals are wide by design. The TP53 p.Arg273His call in NA10842 (c.818G>A, rs28934576; 5/36 reads, VAF 0.14) is absent from the germline call set: a low-VAF hotspot in lymphoblastoid-cell-line DNA is typical of a culture-acquired or clonal-haematopoiesis mutation, and GermlineIQ correctly reports it “to confirm” rather than as a germline finding.`}
         >
           <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
             <table className="w-full min-w-[900px] text-left text-xs">

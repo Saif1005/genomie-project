@@ -391,7 +391,7 @@ export function applyWorkflowStep(
     if (isOneShot) {
       addPathLabel(svg, delPath, '1× single delegation', ONE_SHOT_COLOR);
     } else if (isValidation) {
-      addPathLabel(svg, delPath, '✓ Validation orchestrateur', VALIDATION_COLOR);
+      addPathLabel(svg, delPath, '✓ Orchestrator validation', VALIDATION_COLOR);
     }
   }
 

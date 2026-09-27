@@ -235,9 +235,9 @@ export default function AgentArchitectureDiagram() {
     <section className={styles.root}>
       <div className={styles.header}>
         <div>
-          <div className={styles.title}>Architecture multi-agents — Projet GermlineIQ</div>
+          <div className={styles.title}>GermlineIQ multi-agent architecture</div>
           <div className={styles.subtitle}>
-            FASTQ → VCF → ClinVar → risque · orchestrateur LangGraph · serveur local
+            FASTQ → VCF → ClinVar → risk · LangGraph orchestrator · local server
           </div>
         </div>
         <div className={styles.controls}>
