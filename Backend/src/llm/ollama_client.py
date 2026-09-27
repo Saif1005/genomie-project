@@ -1,4 +1,4 @@
-"""Client Ollama (Mistral) — routeur d'orchestration optionnel et assistant conversationnel."""
+"""Ollama client (Mistral) — optional orchestration router and conversational assistant."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from loguru import logger
 
 
 class OllamaClient:
-    """Inférence locale via Ollama (mistral:v0.3, Q4_K_M ~4-bit)."""
+    """Local inference through Ollama (mistral:v0.3, Q4_K_M ~4-bit)."""
 
     def __init__(
         self,

@@ -6,11 +6,12 @@ import type {
   AssistantChatResponse,
   HealthResponse,
   JobStatusResponse,
+  JobSummary,
   UploadFastqParams,
 } from '@/types/api';
 
-// Par défaut : appels relatifs (/api/v1/…, /health) relayés vers le backend par
-// les rewrites Next.js (next.config.mjs). NEXT_PUBLIC_API_URL force une URL directe.
+// Default: relative calls (/api/v1/…, /health) proxied to the backend by the
+// Next.js rewrites (next.config.mjs). NEXT_PUBLIC_API_URL forces a direct URL.
 const baseURL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
 
 export const apiClient = axios.create({
@@ -26,6 +27,92 @@ export const uploadClient = axios.create({
 
 export async function checkHealth(): Promise<HealthResponse> {
   const { data } = await apiClient.get<HealthResponse>('/health');
+  return data;
+}
+
+export interface FineTuneIteration {
+  iteration: string;
+  description: string;
+  val_perplexity_best: number;
+  train_seconds: number;
+  accepted: boolean;
+  checks: Record<string, boolean>;
+  base: Record<string, number>;
+  fine_tuned: Record<string, number>;
+}
+
+export interface BiogptModelInfo {
+  base_model: string;
+  adapter_in_service: string | null;
+  commentary_enabled: boolean;
+  fine_tuning: {
+    iterations: FineTuneIteration[];
+    decision: string;
+    production_default: string;
+    statistical_note: string;
+  } | null;
+  last_training: {
+    trainable_parameters: number;
+    total_parameters: number;
+    device: string;
+    duration_s: number;
+    versions: Record<string, string>;
+  } | null;
+  corpus: {
+    version: string;
+    retrieved_at: string;
+    abstracts_kept: number;
+    pmids_found: number;
+    per_gene: Record<string, number>;
+    date_range: string[];
+    sha256: string;
+  } | null;
+  knowledge: { version: string; curated: Record<string, string[]> };
+  statistics_model?: StatisticsModelInfo;
+}
+
+export interface StatsEvalMetrics {
+  examples_scored: number;
+  sentence_precision: number;
+  topic_coverage: number;
+  number_accuracy: number | null;
+  status_accuracy: number | null;
+  risk_errors: number;
+  final_verified_rate: number;
+  generated_sentences: number;
+  verified_sentences: number;
+}
+
+export interface StatisticsModelInfo {
+  enabled: boolean;
+  in_service: boolean;
+  adapter_path: string;
+  promoted: { version: string; promoted_at: string } | null;
+  versions: Record<string, string>;
+  dataset: { created_at: string; seed: number; splits: Record<string, { examples: number; sha256: string; fastq_mode: number; risk_levels: Record<string, number> }> } | null;
+  training: { best_val_loss: number; steps: number; duration_s: number; trainable_parameters: number; total_parameters: number; device: string } | null;
+  evaluation: {
+    gate_thresholds: Record<string, number>;
+    promotion: { passed: boolean; per_split: Record<string, { passed: boolean; checks: Record<string, boolean> }> };
+    base_zero_shot: Record<string, StatsEvalMetrics>;
+    fine_tuned: Record<string, StatsEvalMetrics>;
+  } | null;
+}
+
+export async function listJobs(limit = 200): Promise<JobSummary[]> {
+  const { data } = await apiClient.get<JobSummary[]>('/api/v1/jobs', { params: { limit } });
+  return data;
+}
+
+/** Latest multi-agent benchmark (python -m benchmarks.multiagent); loosely typed JSON. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getLatestBenchmark(): Promise<any> {
+  const { data } = await apiClient.get('/api/v1/benchmarks/latest');
+  return data;
+}
+
+export async function getBiogptModel(): Promise<BiogptModelInfo> {
+  const { data } = await apiClient.get<BiogptModelInfo>('/api/v1/models/biogpt');
   return data;
 }
 
@@ -66,18 +153,18 @@ export function formatApiError(err: unknown): string {
     const status = err.response?.status;
     const detail = err.response?.data;
     if (status === 404) {
-      return 'Endpoint introuvable — vérifiez que le backend est démarré (bash scripts/start.sh).';
+      return 'Endpoint not found — check that the backend is running (bash scripts/start.sh).';
     }
     if (status === 0 || err.code === 'ERR_NETWORK') {
-      return `Réseau : impossible de joindre l'API (${baseURL || 'proxy Next.js'}). Vérifiez que le backend tourne et, en accès direct, CORS_ORIGINS.`;
+      return `Network: cannot reach the API (${baseURL || 'Next.js proxy'}). Check that the backend is running and, for direct access, CORS_ORIGINS.`;
     }
     if (typeof detail === 'string') return detail;
     if (detail && typeof detail === 'object' && 'detail' in detail) {
       return String((detail as { detail: unknown }).detail);
     }
-    return err.message || 'Erreur API';
+    return err.message || 'API error';
   }
-  return 'Erreur inattendue';
+  return 'Unexpected error';
 }
 
 export async function uploadAndAnalyze(
@@ -110,24 +197,24 @@ export function isFastqFile(file: File): boolean {
   return FASTQ_EXTENSIONS.some((ext) => name.endsWith(ext));
 }
 
-/** Chemin absolu sur le serveur — le backend vérifie qu'il est sous LOCAL_DATA_ROOT. */
+/** Absolute path on the server — the backend checks that it is under LOCAL_DATA_ROOT. */
 export const SERVER_PATH_PATTERN = /^\/[^\s]+$/;
 const INPUT_FORMAT_HINT =
-  'chemin absolu sur le serveur, ex. /data/zaynb/patients/ID/input/R1.fastq.gz';
+  'absolute path on the server, e.g. /data/germlineiq/patients/ID/input/R1.fastq.gz';
 export const PATIENT_ID_PATTERN = /^[A-Za-z0-9_\-]+$/;
 
 export function validateAnalyzeForm(values: AnalyzeRequest): string | null {
   if (!values.patient_id.trim()) {
-    return 'Le Patient ID est obligatoire.';
+    return 'Patient ID is required.';
   }
   if (!PATIENT_ID_PATTERN.test(values.patient_id.trim())) {
-    return 'Patient ID invalide (lettres, chiffres, _ et - uniquement).';
+    return 'Invalid patient ID (letters, digits, _ and - only).';
   }
   if (!values.fastq_r1.trim()) {
-    return 'Le chemin serveur du FASTQ R1 est obligatoire.';
+    return 'The server path of FASTQ R1 is required.';
   }
   if (!values.fastq_r2.trim()) {
-    return 'Le chemin serveur du FASTQ R2 est obligatoire.';
+    return 'The server path of FASTQ R2 is required.';
   }
   if (!SERVER_PATH_PATTERN.test(values.fastq_r1.trim())) {
     return `R1 invalide (format attendu : ${INPUT_FORMAT_HINT}).`;
@@ -136,7 +223,7 @@ export function validateAnalyzeForm(values: AnalyzeRequest): string | null {
     return `R2 invalide (format attendu : ${INPUT_FORMAT_HINT}).`;
   }
   if (values.fastq_r1.trim() === values.fastq_r2.trim()) {
-    return 'Les chemins FASTQ R1 et R2 doivent être distincts.';
+    return 'FASTQ R1 and R2 paths must be different.';
   }
   return null;
 }

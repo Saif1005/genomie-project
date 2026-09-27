@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 
-/** Wrapper SSR-safe : Mermaid ne s'exécute jamais côté serveur (Vercel) */
+/** SSR-safe wrapper: Mermaid never runs on the server */
 const AgentArchitectureDiagram = dynamic(
   () => import('./AgentArchitectureDiagram'),
   {
@@ -18,7 +18,7 @@ const AgentArchitectureDiagram = dynamic(
           border: '1px solid rgba(255,255,255,0.08)',
         }}
       >
-        Chargement du diagramme architecture…
+        Loading the architecture diagram…
       </div>
     ),
   }

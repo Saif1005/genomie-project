@@ -1,4 +1,4 @@
-"""Assistant conversationnel : comprend la demande et peut lancer ou suivre une analyse."""
+"""Conversational assistant: understands the request and can start or track an analysis."""
 
 from __future__ import annotations
 
@@ -31,23 +31,23 @@ def chat(payload: AssistantChatRequest) -> AssistantChatResponse:
             req = AnalyzeFastqRequest(patient_id=parsed["patient_id"], fastq_r1=parsed["fastq_r1"], fastq_r2=parsed["fastq_r2"])
             started = _start({K.PATIENT_ID: req.patient_id, K.FASTQ_R1: req.fastq_r1, K.FASTQ_R2: req.fastq_r2}, "fastq", "")
             job_id, action = started.job_id, "started_fastq"
-            reply = f"{reply} Job {job_id} créé : {' → '.join(started.plan)}.".strip()
+            reply = f"{reply} Job {job_id} created: {' → '.join(started.plan)}.".strip()
         elif intent == "start_vcf" and not missing and parsed.get("vcf_path"):
             req = AnalyzeVCFRequest(patient_id=parsed["patient_id"], vcf_path=parsed["vcf_path"])
             started = _start({K.PATIENT_ID: req.patient_id, K.VCF_URI: req.vcf_path}, "vcf", "")
             job_id, action = started.job_id, "started_vcf"
-            reply = f"{reply} Job {job_id} créé : {' → '.join(started.plan)}.".strip()
+            reply = f"{reply} Job {job_id} created: {' → '.join(started.plan)}.".strip()
         elif intent == "job_status":
             jid = parsed.get("job_id") or payload.context.get("job_id")
             job = get_job_service().store.get(jid) if jid else None
             if job:
                 action = "job_status"
-                reply = (f"Job {jid} — statut : {job['status']}. Étape : {job.get('current_step') or '—'}. "
+                reply = (f"Job {jid} — status: {job['status']}. Step: {job.get('current_step') or '—'}. "
                          f"{job.get('progress_message') or ''}").strip()
             else:
-                reply = f"Aucun job trouvé pour {jid}." if jid else "Indiquez l'identifiant du job (UUID)."
+                reply = f"No job found for {jid}." if jid else "Please give the job identifier (UUID)."
     except ValidationError as e:
-        reply = "Impossible de lancer l'analyse : " + "; ".join(err["msg"] for err in e.errors())
+        reply = "Cannot start the analysis: " + "; ".join(err["msg"] for err in e.errors())
 
     return AssistantChatResponse(
         reply=reply, intent=intent, action_taken=action, job_id=job_id,

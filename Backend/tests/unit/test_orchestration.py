@@ -1,4 +1,4 @@
-"""Orchestration multi-agent : planification dynamique, exécution, cache, parallélisme, routeur."""
+"""Multi-agent orchestration: dynamic planning, execution, cache, parallelism, router."""
 
 import threading
 import time
@@ -18,7 +18,7 @@ def names(plan):
     return [t.name for t in plan]
 
 
-# --- Planificateur (registre réel) -------------------------------------------
+# --- Planner (real registry) -------------------------------------------------
 def test_vcf_input_skips_alignment():
     ctx = {K.PATIENT_ID: "P1", K.VCF_URI: "/data/p.vcf"}
     assert names(Planner().plan(ctx)) == ["variant_annotation", "vcf_analysis", "prediction", "report"]
@@ -54,12 +54,12 @@ def test_registry_is_consistent():
         assert t.input_schema()["required"] == list(t.requires)
 
 
-# --- Moteur avec outils factices -----------------------------------------------
+# --- Engine with fake tools ---------------------------------------------------
 CALLS = []
 
 
 class Echo(BaseAgent):
-    """Produit « <outil>_out » ; échoue si config['fail'] contient son nom."""
+    """Produces "<tool>_out"; fails if config['fail'] contains its name."""
 
     tool = ""
 
@@ -70,7 +70,7 @@ class Echo(BaseAgent):
         tool = self.tool
         CALLS.append(tool)
         if tool in self.config.get("fail", ()):
-            return AgentResult.fail(f"{tool} en échec")
+            return AgentResult.fail(f"{tool} failed")
         if tool in self.config.get("slow", ()):
             time.sleep(0.2)
         out = {f"{tool}_out": f"{tool}:{threading.current_thread().name}"}
@@ -80,7 +80,7 @@ class Echo(BaseAgent):
 
 
 def __getattr__(name):
-    """Une classe d'agent par outil factice : tests.unit.test_orchestration:Echo_<outil>."""
+    """One agent class per fake tool: tests.unit.test_orchestration:Echo_<tool>."""
     if name.startswith("Echo_"):
         return type(name, (Echo,), {"tool": name[5:]})
     raise AttributeError(name)
@@ -126,7 +126,7 @@ def test_engine_runs_plan_and_reports_steps():
 def test_engine_stops_at_first_critical_failure():
     result = make_engine(LINEAR, fail=("a",)).run({K.PATIENT_ID: "P1", K.VCF_URI: "/v.vcf"})
     assert not result.success
-    assert "a en échec" in result.error
+    assert "a failed" in result.error
     assert CALLS == ["a"]
 
 
@@ -148,7 +148,7 @@ def test_independent_light_tools_run_in_parallel_and_merge_deterministically():
     t0 = time.perf_counter()
     result = make_engine(tools, slow=("x", "y")).run({K.PATIENT_ID: "P1", K.VCF_URI: "/v.vcf"})
     assert result.success
-    assert time.perf_counter() - t0 < 0.39  # 2 × 0,2 s en parallèle, pas en série
+    assert time.perf_counter() - t0 < 0.39  # 2 × 0.2 s in parallel, not in series
     assert [s.tool for s in result.steps] == ["x", "y", "report"]
 
 
@@ -167,7 +167,7 @@ def test_cached_tool_is_not_rerun(tmp_path):
     assert CALLS == ["report"]
     assert second.steps[0].status == "cached"
 
-    input_file.write_text("@r\nC\n+\nI\n@r2\nG\n+\nI\n")  # entrée modifiée → recalcul
+    input_file.write_text("@r\nC\n+\nI\n@r2\nG\n+\nI\n")  # modified input → recomputed
     CALLS.clear()
     make_engine(tools, cache=cache).run(dict(ctx))
     assert CALLS == ["costly", "report"]
@@ -175,7 +175,7 @@ def test_cached_tool_is_not_rerun(tmp_path):
 
 def test_llm_router_falls_back_on_invalid_answer(monkeypatch):
     router = LLMRouter.__new__(LLMRouter)
-    router.client = type("C", (), {"generate": lambda self, *a, **k: "je ne sais pas"})()
+    router.client = type("C", (), {"generate": lambda self, *a, **k: "I do not know"})()
     a, b = LINEAR[0], fake_tool("b", (), ())
     assert router.choose([a, b], {}, []) is a
     router.client = type("C", (), {"generate": lambda self, *a, **k: '{"next_tool": "b"}'})()

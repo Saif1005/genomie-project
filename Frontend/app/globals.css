@@ -16,6 +16,32 @@
   }
 }
 
+/* Chart tokens (palette validated with scripts/validate_palette.js, light and dark) */
+:root {
+  --viz-surface: #ffffff;
+  --viz-grid: #e7e6e2;
+  --viz-series-1: #2a78d6;
+  --viz-series-2: #eb6834;
+  --viz-series-3: #1baf7a;
+  --viz-seq: #2a78d6;
+  --viz-seq-soft: #cde2fb;
+  --viz-band: rgba(42, 120, 214, 0.08);
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-critical: #d03b3b;
+}
+
+.dark {
+  --viz-surface: #0f172a;
+  --viz-grid: #2c3342;
+  --viz-series-1: #3987e5;
+  --viz-series-2: #d95926;
+  --viz-series-3: #199e70;
+  --viz-seq: #3987e5;
+  --viz-seq-soft: #184f95;
+  --viz-band: rgba(57, 135, 229, 0.12);
+}
+
 @layer utilities {
   .tabular-nums {
     font-variant-numeric: tabular-nums;

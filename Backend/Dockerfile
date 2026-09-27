@@ -1,9 +1,10 @@
-# ZAYNB backend — FastAPI + orchestrateur LangGraph + BioGPT (CUDA ou CPU)
-# Les conteneurs GATK / Parabricks sont lancés sur le démon Docker de l'hôte
-# (socket monté par docker-compose.local.yml) ; bwa/samtools tournent ici (pipeline CPU).
+# GermlineIQ backend — FastAPI + LangGraph orchestrator + BioGPT (CUDA or CPU)
+# GATK / Parabricks containers are started on the host Docker daemon
+# (socket mounted by docker-compose.local.yml); bwa/samtools run here (CPU pipeline).
+# PyTorch built for CUDA 12.8: required by RTX 50xx (Blackwell, sm_120) GPUs, also runs on older GPUs and CPU.
 FROM docker:27-cli AS dockercli
 
-FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \

@@ -1,18 +1,16 @@
 """
-Training data preparation for LLM fine-tuning and ML state-of-the-art pipelines.
+Training data preparation for LLM fine-tuning and machine-learning feature pipelines (legacy, somatic).
 
-Validation de la Précision Métrique des Variants Somatiques :
-- Référentiels biologiques (ClinGen/CGC/VICC)
-- Standards oncologiques (AMP/ASCO/CAP)
-- Métriques quantitatives (VAF, CCF, pureté tumorale)
-- Filtrage population (gnomAD avec whitelist COSMIC)
-- Profils mutationnels par sous-type (Luminal A/B, HER2, TNBC)
+Somatic variant metric validation:
+- Biological references (ClinGen/CGC/VICC)
+- Oncology standards (AMP/ASCO/CAP)
+- Quantitative metrics (VAF, CCF, tumour purity)
+- Population filtering (gnomAD with a COSMIC whitelist)
+- Mutational profiles per subtype (Luminal A/B, HER2, TNBC)
 
-État de l'art (SOTA) :
-- Les modèles intégrant multi-omique + VCF atteignent ~93% d'AUC (recherche récente),
-  en surpassant les méthodes statistiques classiques grâce à la détection de
-  patterns non-linéaires complexes. Ce module produit des vecteurs de features
-  VCF (et une structure prête pour fusion multi-omique) pour alimenter ces modèles.
+This module is NOT used for the germline risk decision (src.genomics.risk). It only feeds the
+optional LoRA training-data agent (train_llm=true) with per-patient feature vectors, in a
+structure ready for multi-omic fusion. No predictive performance is claimed for these features.
 """
 
 import json
@@ -24,38 +22,38 @@ from src.genomics.panel import get_panel as get_cancer_genes_db
 from src.genomics.variant import Variant
 
 # ---------------------------------------------------------------------------
-# Constantes selon standards ClinGen/CGC/VICC et AMP/ASCO/CAP
+# Constants following ClinGen/CGC/VICC and AMP/ASCO/CAP standards
 # ---------------------------------------------------------------------------
 
-# Seuils VAF selon GENIE/AMP Guidelines (Section 3.1)
-MIN_VAF_SOMATIC_LOD = 0.05  # Limite de détection (LOD) pour tissus solides
-MIN_VAF_LIQUID_BIOPSY = 0.001  # 0.1% pour biopsies liquides
-MIN_DEPTH_RELIABLE = 20  # DP < 20x = non significatif statistiquement
-MIN_DEPTH_HIGH_CONFIDENCE = 500  # Pour VAF < 0.05
+# VAF thresholds per GENIE/AMP guidelines (Section 3.1)
+MIN_VAF_SOMATIC_LOD = 0.05  # Limit of detection (LOD) for solid tissue
+MIN_VAF_LIQUID_BIOPSY = 0.001  # 0.1% for liquid biopsies
+MIN_DEPTH_RELIABLE = 20  # DP < 20x = not statistically significant
+MIN_DEPTH_HIGH_CONFIDENCE = 500  # For VAF < 0.05
 
-# Seuils gnomAD pour filtrage germinal (Section 4.1)
-GNOMAD_AF_GERMLINE_THRESHOLD = 0.001  # 0.1% = seuil standard
-GNOMAD_AF_VERY_RARE = 0.0001  # 0.01% = très rare
+# gnomAD thresholds for germline filtering (Section 4.1)
+GNOMAD_AF_GERMLINE_THRESHOLD = 0.001  # 0.1% = standard threshold
+GNOMAD_AF_VERY_RARE = 0.0001  # 0.01% = very rare
 
-# Seuils CCF pour classification clonale (Section 3.2.2)
-CCF_CLONAL_THRESHOLD = 0.90  # CCF ≥ 0.90 = clonal (tronculaire)
-CCF_SUBCLONAL_MAX = 0.90  # CCF < 0.90 = subclonal (branché)
+# CCF thresholds for clonal classification (Section 3.2.2)
+CCF_CLONAL_THRESHOLD = 0.90  # CCF ≥ 0.90 = clonal (truncal)
+CCF_SUBCLONAL_MAX = 0.90  # CCF < 0.90 = subclonal (branched)
 
-# Scores ClinGen/CGC/VICC (Section 2.1)
-CLINGEN_ONCOGENIC_THRESHOLD = 10  # Score ≥ 10 = Oncogénique
-CLINGEN_LIKELY_ONCOGENIC_MIN = 6  # Score 6-9 = Probablement Oncogénique
+# ClinGen/CGC/VICC scores (Section 2.1)
+CLINGEN_ONCOGENIC_THRESHOLD = 10  # Score ≥ 10 = Oncogenic
+CLINGEN_LIKELY_ONCOGENIC_MIN = 6  # Score 6-9 = Likely oncogenic
 CLINGEN_LIKELY_ONCOGENIC_MAX = 9
 CLINGEN_VUS_MAX = 5  # Score 0-5 = VUS
-CLINGEN_LIKELY_BENIGN_MIN = -6  # Score -1 à -6 = Probablement Bénin
-CLINGEN_BENIGN_THRESHOLD = -7  # Score ≤ -7 = Bénin
+CLINGEN_LIKELY_BENIGN_MIN = -6  # Score -1 to -6 = Likely benign
+CLINGEN_BENIGN_THRESHOLD = -7  # Score ≤ -7 = Benign
 
-# Points de preuve ClinGen (Section 2.2)
-EVIDENCE_VERY_STRONG = 8  # O_VS (ex: Null variant dans TSG)
-EVIDENCE_STRONG = 4  # O_S (ex: Hotspot mutationnel)
-EVIDENCE_MODERATE = 2  # O_M (ex: Domaine fonctionnel critique)
-EVIDENCE_SUPPORTING = 1  # O_P (ex: Prédiction in silico)
+# ClinGen evidence points (Section 2.2)
+EVIDENCE_VERY_STRONG = 8  # O_VS (e.g. null variant in a TSG)
+EVIDENCE_STRONG = 4  # O_S (e.g. mutational hotspot)
+EVIDENCE_MODERATE = 2  # O_M (e.g. critical functional domain)
+EVIDENCE_SUPPORTING = 1  # O_P (e.g. in silico prediction)
 
-# Hotspots canoniques PIK3CA (Section 5.2.1)
+# Canonical PIK3CA hotspots (Section 5.2.1)
 PIK3CA_HOTSPOTS = {
     "E542K": {"gene": "PIK3CA", "aa_change": "E542K", "domain": "helical"},
     "E545K": {"gene": "PIK3CA", "aa_change": "E545K", "domain": "helical"},
@@ -63,15 +61,15 @@ PIK3CA_HOTSPOTS = {
     "H1047L": {"gene": "PIK3CA", "aa_change": "H1047L", "domain": "kinase"},
 }
 
-# Gènes suppresseurs de tumeurs (pour PVS1/O_VS)
+# Tumour suppressor genes (for PVS1/O_VS)
 TUMOR_SUPPRESSOR_GENES = frozenset({
     "BRCA1", "BRCA2", "TP53", "PTEN", "RB1", "APC", "VHL", "NF1", "NF2"
 })
 
-# Cible état de l'art : AUC rapportée dans la littérature (modèles multi-omique + VCF)
-SOTA_TARGET_AUC = 0.93  # ~93% AUC pour intégration multi-omique + VCF
+# Literature value quoted for multi-omic + VCF models; not reproduced or validated in this project
+SOTA_TARGET_AUC = 0.93
 
-# Profils mutationnels par sous-type cancer du sein (Section 5.1)
+# Breast cancer subtype mutational profiles (Section 5.1)
 BREAST_CANCER_SUBTYPE_PROFILES = {
     "Luminal_A": {
         "PIK3CA_freq": 0.45,
@@ -109,13 +107,13 @@ class TrainingDataPreparation:
     """
     Prepare training data for LLM fine-tuning.
     
-    Implémente les standards de validation des métriques réelles :
-    - Calcul CCF (Cancer Cell Fraction) avec pureté tumorale
-    - Score d'oncogénicité ClinGen/CGC/VICC (points)
-    - Distinction germinal/somatique
-    - Filtrage gnomAD avec whitelist COSMIC
-    - Validation profondeur séquençage
-    - Profils mutationnels par sous-type
+    Implements validation standards for real metrics:
+    - CCF (cancer cell fraction) computation with tumour purity
+    - ClinGen/CGC/VICC oncogenicity score (points)
+    - Germline/somatic distinction
+    - gnomAD filtering with a COSMIC whitelist
+    - Sequencing depth validation
+    - Mutational profiles per subtype
     """
 
     def __init__(self, tumor_purity: Optional[float] = None):
@@ -123,7 +121,7 @@ class TrainingDataPreparation:
         Initialize training data preparation.
         
         Args:
-            tumor_purity: Pureté tumorale (0-1) pour calcul CCF. Si None, utilise VAF brute.
+            tumor_purity: Tumour purity (0-1) for CCF computation. If None, raw VAF is used.
         """
         self.logger = logger
         self.tumor_purity = tumor_purity
@@ -138,17 +136,17 @@ class TrainingDataPreparation:
         analysis_result: Optional[Dict] = None,
     ) -> Dict[str, Any]:
         """
-        Prepare training example from le JSON des métriques VCF (output pipeline GATK/VCF).
+        Prepare a training example from the VCF metrics JSON (GATK/VCF pipeline output).
 
-        Ce JSON est produit par src.genomics.analysis.to_vcf_metrics (docs/METRIQUES_DETECTION_CANCER_SEIN.md)
-        et transmis par l'orchestrateur au bioLLM pour entraînement et prédiction (cancer oui/non).
+        This JSON is produced by src.genomics.analysis.to_vcf_metrics and passed by the orchestrator
+        to the training-data agent.
 
         Args:
-            metrics_source: Chemin vers le fichier vcf_metrics.json ou dict (metadata + summary + variants)
-            analysis_result: Résultat d'analyse optionnel pour le message assistant
+            metrics_source: Path to the vcf_metrics.json file or a dict (metadata + summary + variants)
+            analysis_result: Optional analysis result for the assistant message
 
         Returns:
-            Training example (messages + metadata) pour le bioLLM
+            Training example (messages + metadata)
         """
         if isinstance(metrics_source, (str, Path)):
             with open(metrics_source, "r", encoding="utf-8") as f:
@@ -248,26 +246,25 @@ class TrainingDataPreparation:
         include_distributions: bool = True,
     ) -> Dict[str, Union[int, float, List[float]]]:
         """
-        Construit un vecteur de features numériques par patient pour modèles SOTA.
+        Builds a per-patient numeric feature vector for machine-learning models.
 
-        Conçu pour intégration multi-omique et détection de patterns non-linéaires
-        (cible ~93% AUC). Les features dérivées du VCF peuvent être concaténées
-        avec transcriptomique, méthylation, etc.
+        Designed for multi-omic integration: VCF-derived features can be concatenated
+        with transcriptomics, methylation, etc.
 
         Args:
-            variants: Liste de variants déjà enrichis (avec vaf, ccf, oncogenicity_score, etc.)
-            coverage: Profondeur de séquençage moyenne
-            tumor_purity: Pureté tumorale si disponible (sinon NaN)
-            include_gene_counts: Inclure comptages par gène clé (one-hot / counts)
+            variants: List of already enriched variants (with vaf, ccf, oncogenicity_score, etc.)
+            coverage: Mean sequencing depth
+            tumor_purity: Tumour purity if available (else NaN)
+            include_gene_counts: Include counts per key gene (one-hot / counts)
             include_distributions: Inclure stats de distribution (VAF, CCF)
 
         Returns:
-            Dict de features numériques (prêt pour concat avec autres omics)
+            Dict of numeric features (ready to concatenate with other omics)
         """
         somatic = [v for v in variants if not v.get("is_filtered_germinal", False)]
         n = len(somatic)
 
-        # --- Features scalaires agrégées ---
+        # --- Aggregated scalar features ---
         feats = {
             "vcf_variant_count": n,
             "vcf_coverage": coverage,
@@ -290,7 +287,7 @@ class TrainingDataPreparation:
             ),
         }
 
-        # --- Scores agrégés (pour patterns non-linéaires) ---
+        # --- Aggregated scores ---
         onc_scores = [v.get("oncogenicity_score") for v in somatic if v.get("oncogenicity_score") is not None]
         feats["vcf_oncogenicity_score_sum"] = sum(onc_scores) if onc_scores else 0.0
         feats["vcf_oncogenicity_score_max"] = max(onc_scores) if onc_scores else 0.0
@@ -312,7 +309,7 @@ class TrainingDataPreparation:
         else:
             feats["vcf_ccf_mean"] = feats["vcf_ccf_max"] = feats["vcf_ccf_std"] = float("nan")
 
-        # --- Comptages par gènes clés (pour sous-types et non-linéarité) ---
+        # --- Counts per key gene (subtypes) ---
         if include_gene_counts:
             key_genes = set()
             for profile in BREAST_CANCER_SUBTYPE_PROFILES.values():
@@ -323,10 +320,10 @@ class TrainingDataPreparation:
                 feats.get(f"vcf_gene_{g}_count", 0) for g in key_genes
             )
 
-        # --- Indicateurs binaires dérivés (interactions) ---
+        # --- Derived binary indicators (interactions) ---
         feats["vcf_has_clonal_driver"] = 1.0 if feats["vcf_clonal_driver_count"] > 0 else 0.0
         feats["vcf_has_oncogenic"] = 1.0 if feats["vcf_oncogenic_count"] > 0 else 0.0
-        feats["vcf_high_burden"] = 1.0 if n >= 5 else 0.0  # seuil arbitraire
+        feats["vcf_high_burden"] = 1.0 if n >= 5 else 0.0  # arbitrary threshold
         feats["vcf_reliable_burden_ratio"] = (
             feats["vcf_high_confidence_count"] / n if n > 0 else 0.0
         )
@@ -344,35 +341,35 @@ class TrainingDataPreparation:
         multi_omic_placeholder: Optional[Dict[str, Union[int, float, List[float]]]] = None,
     ) -> Dict[str, Any]:
         """
-        Prépare un exemple d'entraînement au format état de l'art (SOTA).
+        Prepares a training example combining chat messages and a feature vector.
 
         Combine :
-        - messages chat (pour fine-tuning LLM)
+        - chat messages (for LLM fine-tuning)
         - metadata patient
-        - vecteur de features VCF pour ML / fusion multi-omique
-        - slot optionnel pour autres omics (transcriptomique, méthylation)
+        - VCF feature vector for ML / multi-omic fusion
+        - optional slot for other omics (transcriptomics, methylation)
 
-        Cible : modèles intégrant multi-omique + VCF, ~93% AUC.
+        Intended for models integrating multi-omic data and VCF features.
 
         Args:
             patient_id: Identifiant patient
-            variants: Liste de variants (Variant ou dict)
+            variants: List of variants (Variant or dict)
             coverage: Profondeur
-            label: Label vérité terrain (cancer oui/non ou score) pour éval AUC
-            analysis_result: Résultat d'analyse pour message assistant
-            tumor_purity: Pureté tumorale pour CCF
-            multi_omic_placeholder: Dict de features d'autres omics à fusionner (clés préfixées)
+            label: Ground-truth label (cancer yes/no or score) for AUC evaluation
+            analysis_result: Analysis result for the assistant message
+            tumor_purity: Tumour purity for CCF
+            multi_omic_placeholder: Dict of other-omic features to merge (prefixed keys)
 
         Returns:
-            Dict avec messages, metadata, feature_vector_vcf, optional feature_vector_multi_omic, label
+            Dict with messages, metadata, feature_vector_vcf, optional feature_vector_multi_omic, label
         """
-        # Enrichir variants si ce sont des objets Variant
+        # Enrich variants if they are Variant objects
         if variants and Variant is not None and isinstance(variants[0], Variant):
             variant_dicts = [self._variant_to_dict(v) for v in variants]
         else:
             variant_dicts = list(variants) if variants else []
 
-        # Utiliser pureté passée ou instance
+        # Use the given purity or the instance one
         purity = tumor_purity if tumor_purity is not None else self.tumor_purity
 
         # Exemple chat (comme avant)
@@ -383,7 +380,7 @@ class TrainingDataPreparation:
             analysis_result=analysis_result,
         )
 
-        # Vecteur de features VCF pour SOTA
+        # VCF feature vector
         feature_vector_vcf = self.build_patient_feature_vector(
             variant_dicts, coverage, tumor_purity=purity,
             include_gene_counts=True,
@@ -401,14 +398,14 @@ class TrainingDataPreparation:
             out["label"] = label
         if multi_omic_placeholder:
             out["feature_vector_other_omics"] = multi_omic_placeholder
-            # Ordre recommandé pour concaténation : VCF puis autres omics
+            # Recommended concatenation order: VCF then other omics
             out["feature_vector_combined_keys"] = (
                 list(feature_vector_vcf.keys()) + list(multi_omic_placeholder.keys())
             )
         return out
 
     def get_sota_feature_names(self) -> List[str]:
-        """Retourne les noms des features VCF pour reproductibilité et pipelines ML."""
+        """Returns the VCF feature names for reproducibility and ML pipelines."""
         key_genes = set()
         for profile in BREAST_CANCER_SUBTYPE_PROFILES.values():
             key_genes.update(profile.get("key_genes", []))
@@ -428,12 +425,12 @@ class TrainingDataPreparation:
         """
         Convert Variant object to enriched dictionary with validated metrics.
         
-        Implémente les standards de validation :
-        - Calcul CCF si pureté tumorale disponible
-        - Score d'oncogénicité ClinGen (points)
+        Implements the validation standards:
+        - CCF computation when tumour purity is available
+        - ClinGen oncogenicity score (points)
         - Distinction germinal/somatique
         - Validation profondeur (DP ≥ 20x)
-        - Filtrage gnomAD avec whitelist COSMIC
+        - gnomAD filtering with a COSMIC whitelist
 
         Args:
             variant: Variant object
@@ -467,22 +464,22 @@ class TrainingDataPreparation:
         # Distinction germinal/somatique (Section 3.1.2)
         is_likely_germinal = self._is_likely_germinal(vaf, af)
         
-        # Filtrage gnomAD avec whitelist COSMIC (Section 4.1)
+        # gnomAD filtering with a COSMIC whitelist (Section 4.1)
         is_filtered_germinal = self._should_filter_as_germinal(vaf, af, variant)
         
-        # Calcul CCF si pureté tumorale disponible (Section 3.2.1)
+        # CCF computation when tumour purity is available (Section 3.2.1)
         ccf = None
         clonality = None
         if vaf is not None and self.tumor_purity is not None:
             ccf, clonality = self._calculate_ccf(
                 vaf=vaf,
                 tumor_purity=self.tumor_purity,
-                copy_number_tumor=2,  # Par défaut diploïde, peut être extrait de CNV
+                copy_number_tumor=2,  # Diploid by default, may come from CNV data
                 copy_number_normal=2,
-                mutation_multiplicity=1,  # Par défaut hétérozygote
+                mutation_multiplicity=1,  # Heterozygous by default
             )
         
-        # Score d'oncogénicité ClinGen/CGC/VICC (Section 2)
+        # ClinGen/CGC/VICC oncogenicity score (Section 2)
         oncogenicity_score, oncogenicity_class = self._calculate_clingen_oncogenicity_score(variant)
         
         # Check if hotspot
@@ -513,7 +510,7 @@ class TrainingDataPreparation:
             "is_pathogenic": variant.is_pathogenic,
             "is_rare": is_rare,
             "is_cancer_gene": is_cancer_gene,
-            # Nouvelles métriques validées
+            # Additional validated metrics
             "ccf": round(ccf, 3) if ccf is not None else None,
             "clonality": clonality,
             "is_likely_germinal": is_likely_germinal,
@@ -539,14 +536,14 @@ class TrainingDataPreparation:
 
     def _calculate_clingen_oncogenicity_score(self, variant: Variant) -> Tuple[int, str]:
         """
-        Calcule le score d'oncogénicité selon le système ClinGen/CGC/VICC (Section 2).
+        Computes the oncogenicity score with the ClinGen/CGC/VICC system (Section 2).
         
         Returns:
-            Tuple (score_total, classification) où classification est :
+            Tuple (total_score, classification) where classification is:
             - "Oncogenic" (≥10)
             - "Likely_Oncogenic" (6-9)
             - "VUS" (0-5)
-            - "Likely_Benign" (-1 à -6)
+            - "Likely_Benign" (-1 to -6)
             - "Benign" (≤-7)
         """
         score = 0
@@ -555,7 +552,7 @@ class TrainingDataPreparation:
         consequence = (variant.consequence or "").lower()
         is_hotspot = self._is_hotspot(variant)
         
-        # Preuve Très Forte (O_VS = +8) : Null variant dans TSG (Section 2.2)
+        # Very strong evidence (O_VS = +8): null variant in a TSG (Section 2.2)
         if gene in TUMOR_SUPPRESSOR_GENES:
             if any(term in consequence for term in ["frameshift", "stop", "nonsense", "splice"]):
                 score += EVIDENCE_VERY_STRONG
@@ -563,9 +560,9 @@ class TrainingDataPreparation:
         
         # Preuve Forte (O_S = +4) : Hotspot mutationnel (Section 2.2, 5.2.1)
         if is_hotspot:
-            # Vérifier si c'est un hotspot canonique PIK3CA
+            # Check whether it is a canonical PIK3CA hotspot
             if gene == "PIK3CA" and variant.info:
-                # Vérifier annotation COSMIC ou position connue
+                # Check COSMIC annotation or known position
                 if "COSMIC" in variant.info or any(
                     hotspot_info["aa_change"] in str(variant.info.get("AA", ""))
                     for hotspot_info in PIK3CA_HOTSPOTS.values()
@@ -576,30 +573,30 @@ class TrainingDataPreparation:
                 score += EVIDENCE_STRONG
                 self.logger.debug(f"{gene}: Hotspot detected -> +{EVIDENCE_STRONG} (O_S)")
         
-        # Preuve Modérée (O_M = +2) : Domaine fonctionnel critique (Section 2.2)
+        # Moderate evidence (O_M = +2): critical functional domain (Section 2.2)
         if variant.consequence:
             if "missense" in consequence:
-                # Vérifier si dans domaine critique (ex: kinase, DNA-binding)
+                # Check whether in a critical domain (e.g. kinase, DNA-binding)
                 if gene == "PIK3CA" and "kinase" in str(variant.info.get("Domain", "")).lower():
                     score += EVIDENCE_MODERATE
                 elif gene == "TP53" and "dna-binding" in str(variant.info.get("Domain", "")).lower():
                     score += EVIDENCE_MODERATE
                 else:
-                    # Missense dans gène cancérigène = modéré par défaut
+                    # Missense in a cancer gene = moderate by default
                     if self.cancer_genes_db and gene and self.cancer_genes_db.is_cancer_gene(gene):
                         score += EVIDENCE_MODERATE
         
-        # Preuve de Soutien (O_P = +1) : Prédictions in silico ou faible récurrence
+        # Supporting evidence (O_P = +1): in silico predictions or low recurrence
         if variant.gnomad_af is not None and variant.gnomad_af < GNOMAD_AF_VERY_RARE:
             score += EVIDENCE_SUPPORTING
-        elif variant.gnomad_af is None:  # Non présent dans gnomAD
+        elif variant.gnomad_af is None:  # Absent from gnomAD
             score += EVIDENCE_SUPPORTING
         
-        # Pénalités pour variants fréquents (Bénin)
+        # Penalties for frequent variants (benign)
         if variant.gnomad_af is not None and variant.gnomad_af > GNOMAD_AF_GERMLINE_THRESHOLD:
-            # Si fréquent ET pas dans whitelist COSMIC
+            # If frequent AND not in the COSMIC whitelist
             if not is_hotspot:
-                score -= 2  # Pénalité pour polymorphisme commun
+                score -= 2  # Penalty for a common polymorphism
         
         # Classification selon seuils (Section 2.1)
         if score >= CLINGEN_ONCOGENIC_THRESHOLD:
@@ -624,24 +621,24 @@ class TrainingDataPreparation:
         mutation_multiplicity: int = 1,
     ) -> Tuple[Optional[float], Optional[str]]:
         """
-        Calcule la Fraction Cellulaire Cancéreuse (CCF) selon Section 3.2.1.
+        Computes the cancer cell fraction (CCF) as in Section 3.2.1.
         
         Formule : CCF = (VAF × [p × CN_t + (1-p) × CN_n]) / (p × CN_mut)
         
         Args:
             vaf: Variant Allele Frequency (0-1)
-            tumor_purity: Pureté tumorale p (0-1)
-            copy_number_tumor: CN_t (nombre de copies total dans cellules tumorales)
-            copy_number_normal: CN_n (généralement 2)
-            mutation_multiplicity: CN_mut (multiplicité de la mutation)
+            tumor_purity: Tumour purity p (0-1)
+            copy_number_tumor: CN_t (total copy number in tumour cells)
+            copy_number_normal: CN_n (usually 2)
+            mutation_multiplicity: CN_mut (mutation multiplicity)
         
         Returns:
-            Tuple (ccf, clonality) où clonality est "Clonal" ou "Subclonal"
+            Tuple (ccf, clonality) where clonality is "Clonal" or "Subclonal"
         """
         if vaf is None or tumor_purity is None or tumor_purity <= 0:
             return None, None
         
-        # Calcul CCF selon formule de référence
+        # CCF from the reference formula
         numerator = vaf * (tumor_purity * copy_number_tumor + (1 - tumor_purity) * copy_number_normal)
         denominator = tumor_purity * mutation_multiplicity
         
@@ -650,7 +647,7 @@ class TrainingDataPreparation:
         
         ccf = numerator / denominator
         
-        # Limiter CCF à 1.0 (ne peut pas dépasser 100% des cellules cancéreuses)
+        # Cap CCF at 1.0 (cannot exceed 100% of cancer cells)
         ccf = min(1.0, max(0.0, ccf))
         
         # Classification clonale (Section 3.2.2)
@@ -663,48 +660,48 @@ class TrainingDataPreparation:
     
     def _is_likely_germinal(self, vaf: Optional[float], af: Optional[float]) -> bool:
         """
-        Détermine si un variant est probablement germinal (Section 3.1.2).
+        Determines whether a variant is probably germline (Section 3.1.2).
         
-        Critères :
-        - VAF > 0.45 (hétérozygote) ou ~1.0 (homozygote)
-        - ET fréquence population > 0.01 (1%)
+        Criteria:
+        - VAF > 0.45 (heterozygous) or ~1.0 (homozygous)
+        - AND population frequency > 0.01 (1%)
         """
         if vaf is None:
             return False
         
-        # VAF proche de 50% (hétérozygote) ou 100% (homozygote)
+        # VAF close to 50% (heterozygous) or 100% (homozygous)
         is_het_germinal = 0.45 <= vaf <= 0.55
         is_hom_germinal = vaf >= 0.95
         
-        # Fréquence population élevée
+        # High population frequency
         is_common_population = af is not None and af > 0.01
         
         return (is_het_germinal or is_hom_germinal) and is_common_population
     
     def _should_filter_as_germinal(self, vaf: Optional[float], af: Optional[float], variant: Variant) -> bool:
         """
-        Détermine si un variant doit être filtré comme germinal (Section 4.1).
+        Determines whether a variant must be filtered as germline (Section 4.1).
         
-        Règle de validation critique : Si popAF > 0.001 MAIS présent dans COSMIC,
-        NE PAS filtrer (whitelist).
+        Critical validation rule: if popAF > 0.001 BUT present in COSMIC,
+        do NOT filter (whitelist).
         """
         if af is None or af < GNOMAD_AF_GERMLINE_THRESHOLD:
-            return False  # Trop rare pour être un polymorphisme commun
+            return False  # Too rare to be a common polymorphism
         
-        # Whitelist COSMIC : Ne pas filtrer les hotspots même si fréquents
+        # COSMIC whitelist: never filter hotspots even if frequent
         is_cosmic_hotspot = self._is_hotspot(variant)
         if is_cosmic_hotspot:
-            return False  # Sauvé par whitelist
+            return False  # Rescued by the whitelist
         
-        # Filtrer si fréquent ET pas dans whitelist
+        # Filter if frequent AND not in the whitelist
         return True
     
     def _assess_vaf_confidence(self, vaf: Optional[float], dp: Optional[int]) -> str:
         """
-        Évalue le niveau de confiance pour un appel VAF (Section 3.1.1).
+        Assesses the confidence level of a VAF call (Section 3.1.1).
         
         Returns:
-            "High", "Medium", "Low", ou "Unreliable"
+            "High", "Medium", "Low", or "Unreliable"
         """
         if vaf is None or dp is None:
             return "Unreliable"
@@ -712,21 +709,21 @@ class TrainingDataPreparation:
         # Validation selon Section 3.1.1
         if vaf < MIN_VAF_SOMATIC_LOD:
             if dp < MIN_DEPTH_HIGH_CONFIDENCE:
-                return "Low"  # VAF faible ET profondeur insuffisante
+                return "Low"  # Low VAF AND insufficient depth
             else:
                 return "Medium"  # VAF faible mais profondeur OK
         
         if dp < MIN_DEPTH_RELIABLE:
             return "Low"  # Profondeur < 20x = non significatif
         
-        return "High"  # VAF ≥ 5% et DP ≥ 20x
+        return "High"  # VAF ≥ 5% and DP ≥ 20x
 
     def _is_hotspot(self, variant: Variant) -> bool:
         """
-        Vérifie si un variant est dans un hotspot connu (Section 5.2.1).
+        Checks whether a variant lies in a known hotspot (Section 5.2.1).
         
-        Vérifie :
-        - Annotations COSMIC/HOTSPOT dans INFO
+        Checks:
+        - COSMIC/HOTSPOT annotations in INFO
         - Hotspots canoniques PIK3CA (E542K, E545K, H1047R, H1047L)
         """
         if not variant.info:
@@ -736,13 +733,13 @@ class TrainingDataPreparation:
         if "HOTSPOT" in variant.info or "COSMIC" in variant.info:
             return True
         
-        # Vérification par nom de champ
+        # Check by field name
         if any("hotspot" in str(k).lower() for k in variant.info.keys()):
             return True
         
         # Hotspots canoniques PIK3CA
         if variant.gene and variant.gene.upper() == "PIK3CA":
-            # Vérifier changement d'acide aminé
+            # Check the amino-acid change
             aa_change = variant.info.get("AA", "")
             if isinstance(aa_change, str):
                 for hotspot_name in PIK3CA_HOTSPOTS.keys():
@@ -753,14 +750,14 @@ class TrainingDataPreparation:
     
     def _validate_subtype_profile(self, variants: List[Dict], subtype: Optional[str] = None) -> Dict[str, Any]:
         """
-        Valide le profil mutationnel selon le sous-type de cancer du sein (Section 5.1).
+        Validates the mutational profile against the breast cancer subtype (Section 5.1).
         
         Args:
             variants: Liste de variants enrichis
             subtype: Sous-type attendu ("Luminal_A", "Luminal_B", "HER2_Enriched", "TNBC")
         
         Returns:
-            Dict avec validation et alertes de qualité
+            Dict with validation and quality alerts
         """
         if not subtype or subtype not in BREAST_CANCER_SUBTYPE_PROFILES:
             return {"validated": False, "alerts": []}
@@ -768,30 +765,30 @@ class TrainingDataPreparation:
         profile = BREAST_CANCER_SUBTYPE_PROFILES[subtype]
         alerts = []
         
-        # Compter mutations par gène clé
+        # Count mutations per key gene
         gene_counts = {}
         for variant in variants:
             gene = variant.get("gene", "").upper()
             if gene:
                 gene_counts[gene] = gene_counts.get(gene, 0) + 1
         
-        # Vérifications spécifiques par sous-type
+        # Subtype-specific checks
         if subtype == "TNBC":
-            # TP53 devrait être présent dans ~80-84% des cas
+            # TP53 is expected in ~80-84% of cases
             has_tp53 = "TP53" in gene_counts
             if not has_tp53:
                 alerts.append(
-                    "ALERTE QUALITÉ: TNBC sans mutation TP53 détectée. "
-                    "Biologiquement improbable (bien que possible). Révision manuelle recommandée."
+                    "QUALITY ALERT: TNBC without a detected TP53 mutation. "
+                    "Biologically unlikely (although possible). Manual review recommended."
                 )
         
         elif subtype == "Luminal_A":
-            # PIK3CA devrait être fréquent (~45%)
+            # PIK3CA is expected to be frequent (~45%)
             has_pik3ca = "PIK3CA" in gene_counts
             if not has_pik3ca:
                 alerts.append(
-                    "INFO: Luminal A sans mutation PIK3CA détectée. "
-                    "Peut être valide mais moins fréquent."
+                    "INFO: Luminal A without a detected PIK3CA mutation. "
+                    "May be valid but less frequent."
                 )
         
         return {
@@ -804,14 +801,14 @@ class TrainingDataPreparation:
         self, variants: List[Dict], coverage: float
     ) -> Dict[str, Any]:
         """
-        Calcule les métriques agrégées au niveau patient (Section 7).
+        Computes aggregated patient-level metrics (Section 7).
 
         Args:
             variants: List of variant dictionaries (enriched)
             coverage: Sequencing coverage
 
         Returns:
-            Dictionary with patient-level metrics validées
+            Dictionary with validated patient-level metrics
         """
         if not variants:
             return {
@@ -826,15 +823,15 @@ class TrainingDataPreparation:
                 "reliable_variant_count": 0,
             }
         
-        # Filtrer les variants germinaux pour métriques somatiques
+        # Filter out germline variants for somatic metrics
         somatic_variants = [v for v in variants if not v.get("is_filtered_germinal", False)]
         
-        # Métriques standard
+        # Standard metrics
         rare_variant_count = sum(1 for v in somatic_variants if v.get("is_rare", False))
         cancer_gene_count = sum(1 for v in somatic_variants if v.get("is_cancer_gene", False))
         pathogenic_count = sum(1 for v in somatic_variants if v.get("is_pathogenic", False))
         
-        # Nouvelles métriques validées
+        # Additional validated metrics
         oncogenic_count = sum(
             1 for v in somatic_variants
             if v.get("oncogenicity_class") in ("Oncogenic", "Likely_Oncogenic")
@@ -857,7 +854,7 @@ class TrainingDataPreparation:
             "oncogenic_count": oncogenic_count,
             "clonal_driver_count": clonal_driver_count,
             "reliable_variant_count": reliable_variant_count,
-            # Validation qualité
+            # Quality validation
             "has_reliable_depth": coverage >= MIN_DEPTH_RELIABLE,
             "germinal_filtered_count": len(variants) - len(somatic_variants),
         }

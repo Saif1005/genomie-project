@@ -1,4 +1,4 @@
-﻿"""metrics.py - Calcul des metriques de latence (percentiles, stats)."""
+﻿"""metrics.py - Latency metrics (percentiles, statistics)."""
 
 from __future__ import annotations
 import math

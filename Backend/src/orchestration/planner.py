@@ -1,6 +1,6 @@
-"""Planificateur dynamique : chaînage arrière depuis les objectifs vers les données disponibles.
+"""Dynamic planner: backward chaining from the goals to the available data.
 
-Déterministe (ordre du registre en cas d'égalité) : un même contexte donne toujours le même plan.
+Deterministic (registry order breaks ties): the same context always gives the same plan.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from src.orchestration.registry import TOOLS, ToolSpec
 
 
 class PlanningError(RuntimeError):
-    """Aucune suite d'outils ne permet d'atteindre l'objectif avec les données fournies."""
+    """No sequence of tools can reach the goal with the data provided."""
 
 
 def _available(ctx: Dict[str, Any], key: str) -> bool:
@@ -39,7 +39,7 @@ class Planner:
             return
         tool = self._producer(key, ctx, visiting)
         if tool is None:
-            raise PlanningError(f"Impossible d'obtenir « {key} » : aucune donnée ni outil disponible")
+            raise PlanningError(f"Cannot obtain \"{key}\": no data or tool available")
         visiting.add(tool.name)
         for dep in tool.requires:
             self._resolve(dep, ctx, plan, visiting)
@@ -55,6 +55,6 @@ class Planner:
 
     @staticmethod
     def ready(plan: Sequence[ToolSpec], ctx: Dict[str, Any], done: Iterable[str]) -> List[ToolSpec]:
-        """Outils du plan non encore exécutés dont toutes les entrées sont disponibles."""
+        """Plan tools not yet run whose inputs are all available."""
         done = set(done)
         return [t for t in plan if t.name not in done and all(_available(ctx, k) for k in t.requires)]

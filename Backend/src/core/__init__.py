@@ -1,4 +1,4 @@
-"""Contrats partagés : agent de base et vocabulaire du contexte."""
+"""Shared contracts: base agent and context vocabulary."""
 
 from src.core.agent import AgentError, AgentResult, AgentStatus, BaseAgent
 

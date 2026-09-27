@@ -1,4 +1,4 @@
-"""Choix Parabricks / GATK4 CPU selon la VRAM réellement détectée."""
+"""Parabricks / GATK4 CPU choice according to the VRAM actually detected."""
 
 import pytest
 
@@ -8,7 +8,7 @@ import src.utils.gpu_manager as gm
 @pytest.mark.parametrize(
     "vram_mb,expected",
     [
-        (15360, "parabricks"),  # carte « 16 Go » (15 360 MiB exposés)
+        (15360, "parabricks"),  # "16 GB" card (15,360 MiB exposed)
         (16384, "parabricks"),
         (24576, "parabricks"),
         (12288, "cpu"),

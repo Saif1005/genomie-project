@@ -1,4 +1,4 @@
-"""Exécution des commandes du pipeline sur le serveur (bash -c, pipefail)."""
+"""Running pipeline commands on the server (bash -c, pipefail)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from loguru import logger
 
 
 class PipelineError(RuntimeError):
-    """Échec d'une étape du pipeline (message avec la fin de stderr)."""
+    """Failure of a pipeline step (message with the tail of stderr)."""
 
 
 @dataclass
@@ -30,5 +30,5 @@ class LocalExecutor:
         try:
             p = subprocess.run(["bash", "-c", command], capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as e:
-            raise PipelineError(f"Délai dépassé ({timeout}s) : {command[:120]}…") from e
+            raise PipelineError(f"Timeout ({timeout}s): {command[:120]}…") from e
         return CommandResult(p.returncode, p.stdout, p.stderr)

@@ -1,4 +1,4 @@
-"""Stockage sur le système de fichiers du serveur (mode local)."""
+"""Storage on the server file system (local mode)."""
 
 from __future__ import annotations
 
@@ -24,11 +24,11 @@ class LocalStorage(StorageBackend):
 
     def _resolve(self, uri: str) -> Path:
         if not uri:
-            raise StorageError("Chemin vide")
+            raise StorageError("Empty path")
         if uri.startswith("s3://"):
             raise StorageError(
-                f"URI S3 non supportée (stockage local uniquement) : {uri}. "
-                f"Déposez le fichier sous {self.root}/patients/<ID>/input/"
+                f"S3 URI not supported (local storage only): {uri}. "
+                f"Place the file under {self.root}/patients/<ID>/input/"
             )
         if uri.startswith("file://"):
             uri = uri[len("file://"):]
@@ -50,11 +50,11 @@ class LocalStorage(StorageBackend):
             p = self._resolve(uri)
         except StorageError as e:
             raise ValueError(str(e)) from e
-        # Données de santé : on refuse tout chemin hors de la racine (pas de ../ ni /etc/…)
+        # Health data: any path outside the root is refused (no ../ nor /etc/…)
         if not self._is_under_root(p):
-            raise ValueError(f"Chemin hors de LOCAL_DATA_ROOT ({self.root}) : {uri}")
+            raise ValueError(f"Path outside LOCAL_DATA_ROOT ({self.root}): {uri}")
         if not p.is_file():
-            raise ValueError(f"Fichier introuvable sur le serveur : {p}")
+            raise ValueError(f"File not found on the server: {p}")
         return str(p)
 
     def is_managed(self, uri: str) -> bool:
@@ -71,16 +71,16 @@ class LocalStorage(StorageBackend):
         return p.is_file() and p.stat().st_size > 0
 
     def fetch(self, uri: str, dest: Path) -> str:
-        # Aucun transfert : le fichier est lu en place.
+        # No transfer: the file is read in place.
         p = self._resolve(uri)
         if not p.is_file():
-            raise StorageError(f"Fichier introuvable : {p}")
+            raise StorageError(f"File not found: {p}")
         return str(p)
 
     def put(self, local_path: str, key: str, area: str = "output", move: bool = False) -> str:
         src = Path(local_path).resolve()
         if not src.is_file():
-            raise StorageError(f"Fichier local introuvable : {local_path}")
+            raise StorageError(f"Local file not found: {local_path}")
         dest = self._resolve(key)
         if not self._is_under_root(dest):
             raise StorageError(f"Destination hors de LOCAL_DATA_ROOT : {dest}")

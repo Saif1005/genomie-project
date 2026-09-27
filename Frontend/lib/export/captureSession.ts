@@ -54,7 +54,7 @@ async function collectFrames(
 }
 
 async function framesToWebm(frames: HTMLCanvasElement[], fps: number): Promise<Blob> {
-  if (!frames.length) throw new Error('Aucune image capturée');
+  if (!frames.length) throw new Error('No frame captured');
 
   const w = frames[0].width;
   const h = frames[0].height;
@@ -77,7 +77,7 @@ async function framesToWebm(frames: HTMLCanvasElement[], fps: number): Promise<B
 
   const done = new Promise<Blob>((resolve, reject) => {
     recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
-    recorder.onerror = () => reject(new Error('Échec MediaRecorder'));
+    recorder.onerror = () => reject(new Error('MediaRecorder failed'));
   });
 
   recorder.start();
@@ -93,7 +93,7 @@ async function framesToWebm(frames: HTMLCanvasElement[], fps: number): Promise<B
 }
 
 function framesToGif(frames: HTMLCanvasElement[], fps: number): Blob {
-  if (!frames.length) throw new Error('Aucune image capturée');
+  if (!frames.length) throw new Error('No frame captured');
 
   const w = frames[0].width;
   const h = frames[0].height;
@@ -114,7 +114,7 @@ function framesToGif(frames: HTMLCanvasElement[], fps: number): Blob {
   return new Blob([new Uint8Array(bytes)], { type: 'image/gif' });
 }
 
-/** Lance le workflow et exporte l’animation en WebM ou GIF */
+/** Runs the workflow animation and exports it as WebM or GIF */
 export async function runAndExportSession(options: CaptureSessionOptions): Promise<void> {
   const {
     format,
@@ -127,7 +127,7 @@ export async function runAndExportSession(options: CaptureSessionOptions): Promi
     onProgress,
   } = options;
 
-  onProgress?.('Préparation de l’enregistrement…');
+  onProgress?.('Preparing the recording…');
   prepareDiagram(diagramContainer);
 
   const allFrames: HTMLCanvasElement[] = [];
@@ -135,12 +135,12 @@ export async function runAndExportSession(options: CaptureSessionOptions): Promi
   for (let i = 0; i < steps.length; i++) {
     applyWorkflowStep(diagramContainer, steps[i]);
     onStep?.(steps[i], i);
-    onProgress?.(`Capture étape ${i + 1}/${steps.length}…`);
+    onProgress?.(`Capturing step ${i + 1}/${steps.length}…`);
     const stepFrames = await collectFrames(captureTarget, stepMs, fps);
     allFrames.push(...stepFrames);
   }
 
-  onProgress?.(format === 'gif' ? 'Encodage GIF…' : 'Encodage vidéo WebM…');
+  onProgress?.(format === 'gif' ? 'Encoding GIF…' : 'Encoding WebM video…');
 
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
 
@@ -153,5 +153,5 @@ export async function runAndExportSession(options: CaptureSessionOptions): Promi
     );
   }
 
-  onProgress?.('Export terminé.');
+  onProgress?.('Export finished.');
 }

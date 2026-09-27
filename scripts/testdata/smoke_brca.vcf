@@ -1,5 +1,5 @@
 ##fileformat=VCFv4.2
-##source=ZAYNB-smoke-test (VCF SYNTHETIQUE - aucune donnee patient reelle)
+##source=GERMLINEIQ-smoke-test (VCF SYNTHETIQUE - aucune donnee patient reelle)
 ##reference=hg38
 ##contig=<ID=chr1,length=248956422>
 ##contig=<ID=chr13,length=114364328>

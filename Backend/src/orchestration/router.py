@@ -1,8 +1,8 @@
-"""Choix de l'outil suivant parmi ceux qui sont prêts.
+"""Choosing the next tool among those that are ready.
 
-Le planificateur garantit que tous les outils proposés sont valides et indépendants entre eux :
-l'ordre choisi ne change donc jamais le résultat clinique. Le routeur Mistral (optionnel,
-ORCHESTRATOR_DETERMINISTIC=false) n'est consulté que s'il y a réellement un choix à faire.
+The planner guarantees that every proposed tool is valid and independent of the others: the
+chosen order therefore never changes the clinical result. The Mistral router (optional,
+ORCHESTRATOR_DETERMINISTIC=false) is only consulted when there is a real choice to make.
 """
 
 from __future__ import annotations
@@ -31,13 +31,13 @@ class DeterministicRouter:
 
 
 class LLMRouter:
-    """Mistral (Ollama) choisit parmi les candidats ; toute réponse invalide → ordre du registre."""
+    """Mistral (Ollama) picks among the candidates; any invalid answer → registry order."""
 
     name = "mistral"
 
     SYSTEM = (
-        "Tu es l'orchestrateur du pipeline génomique ZAYNB. On te donne des outils prêts à "
-        'être exécutés. Réponds uniquement en JSON : {"next_tool": "<nom>", "reason": "<courte raison>"}.'
+        "You are the orchestrator of the GermlineIQ genomic pipeline. You are given tools that are ready "
+        'to run. Reply only with JSON: {"next_tool": "<name>", "reason": "<short reason>"}.'
     )
 
     def __init__(self) -> None:
@@ -50,10 +50,10 @@ class LLMRouter:
             return candidates[0]
         names = [t.name for t in candidates]
         prompt = (
-            f"Étapes terminées : {done}\n"
-            "Outils prêts :\n"
+            f"Completed steps: {done}\n"
+            "Ready tools:\n"
             + "\n".join(f"- {t.name} : {t.description}" for t in candidates)
-            + "\nLequel exécuter maintenant ?"
+            + "\nWhich one should run now?"
         )
         raw = self.client.generate(prompt, system=self.SYSTEM, temperature=0.0, seed=0)
         m = re.search(r"\{[^{}]*\}", raw or "", re.DOTALL)
@@ -64,7 +64,7 @@ class LLMRouter:
         if choice in names:
             logger.info(f"[Router mistral] {choice} parmi {names}")
             return candidates[names.index(choice)]
-        logger.warning(f"[Router mistral] réponse invalide ({raw!r:.80}) — ordre du registre")
+        logger.warning(f"[Router mistral] invalid answer ({raw!r:.80}) — registry order")
         return candidates[0]
 
 

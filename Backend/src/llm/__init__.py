@@ -1,5 +1,5 @@
-"""Modèles de langage : commentaire BioGPT, client Ollama, préparation et fine-tuning LoRA.
+"""Language models: BioGPT commentary, Ollama client, LoRA data preparation and fine-tuning.
 
-Pas d'import au niveau du paquet : torch / transformers / paramiko ne sont chargés que par
-les modules qui en ont réellement besoin.
+No package-level imports: torch / transformers / paramiko are only loaded by the modules that
+actually need them.
 """

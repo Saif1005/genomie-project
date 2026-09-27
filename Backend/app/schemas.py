@@ -1,6 +1,6 @@
-"""Modèles d'entrée/sortie de l'API REST.
+"""REST API input/output models.
 
-Les noms historiques (s3_uri_r1, s3_uri_r2, vcf_s3) restent acceptés en entrée (alias).
+Historical names (s3_uri_r1, s3_uri_r2, vcf_s3) are still accepted as input aliases.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ _PATIENT_ID = r"^[A-Za-z0-9_\-]+$"
 
 
 def _server_path(v: str) -> str:
-    """Chemin existant sous LOCAL_DATA_ROOT (les chemins hors racine sont refusés)."""
+    """Existing path under LOCAL_DATA_ROOT (paths outside the root are rejected)."""
     return get_storage().validate_input_uri(v)
 
 
@@ -43,7 +43,7 @@ class AnalyzeFastqRequest(BaseModel):
     @model_validator(mode="after")
     def _distinct(self) -> "AnalyzeFastqRequest":
         if self.fastq_r1 == self.fastq_r2:
-            raise ValueError("fastq_r1 et fastq_r2 doivent être distincts")
+            raise ValueError("fastq_r1 and fastq_r2 must be different files")
         return self
 
 
@@ -65,7 +65,7 @@ class AnalyzeResponse(BaseModel):
     status: JobStatus
     patient_id: str
     plan: List[str] = Field(default_factory=list)
-    message: str = "Analyse démarrée"
+    message: str = "Analysis started"
 
 
 class JobStatusResponse(BaseModel):
@@ -84,6 +84,26 @@ class JobStatusResponse(BaseModel):
     steps_completed: List[str] = Field(default_factory=list)
     error: Optional[str] = None
     result: Optional[Dict[str, Any]] = None
+    # Per-agent execution record (tool, ui_step, status completed|cached|failed, duration in s)
+    step_timings: List[Dict[str, Any]] = Field(default_factory=list)
+    duration_s: Optional[float] = None
+    router: Optional[str] = None
+
+
+class JobSummary(BaseModel):
+    """One line of the job history (no report body)."""
+
+    job_id: str
+    patient_id: str
+    status: JobStatus
+    mode: Optional[str] = None
+    created_at: str
+    updated_at: str
+    duration_s: Optional[float] = None
+    risk_level: Optional[str] = None
+    identified_genes: List[str] = Field(default_factory=list)
+    variants_in_panel: Optional[int] = None
+    report_id: Optional[str] = None
 
 
 class ChatMessage(BaseModel):

@@ -1,4 +1,4 @@
-"""Entrées/sorties communes aux agents : répertoire patient et publication d'artefacts."""
+"""Shared agent I/O: patient directory and artifact publication."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from src.storage import get_storage
 
 
 def patient_output_dir(patient_id: str) -> Path:
-    """patients/<ID>/output (créé si besoin)."""
+    """patients/<ID>/output (created if needed)."""
     return get_storage().local_patient_dir(patient_id, "output")
 
 
 def write_artifact(patient_id: str, filename: str, payload: Dict[str, Any]) -> str:
-    """Écrit un JSON trié (diff-able, reproductible) et le publie dans le stockage patient."""
+    """Writes a sorted JSON (diff-able, reproducible) and publishes it to the patient storage."""
     path = patient_output_dir(patient_id) / filename
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True, default=str))

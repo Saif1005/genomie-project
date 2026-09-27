@@ -83,7 +83,7 @@
   animation: none !important;
 }
 
-/* ── Flèches au repos ── */
+/* ── Idle arrows ── */
 .diagramHost :global(.edgePath path) {
   stroke: var(--flow-idle) !important;
   stroke-width: 1.5px !important;
@@ -92,7 +92,7 @@
   animation: none;
 }
 
-/* ── Classe injectée post-render : flux de données ── */
+/* ── Class injected after render: data flow ── */
 @keyframes dataFlowAgent {
   from {
     stroke-dashoffset: 28;
@@ -129,7 +129,7 @@
   animation: dataFlowPipeline 0.7s linear infinite;
 }
 
-/* ── Particules de données sur la flèche active ── */
+/* ── Data particles on the active arrow ── */
 .particleLayer {
   pointer-events: none;
 }

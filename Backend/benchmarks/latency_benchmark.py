@@ -1,5 +1,5 @@
 ﻿"""
-latency_benchmark.py - Benchmark sequentiel de latence par endpoint.
+latency_benchmark.py - Sequential latency benchmark per endpoint.
 
 Usage:
     python -m benchmarks.latency_benchmark
@@ -85,7 +85,7 @@ def _build_scenarios(cfg: BenchmarkConfig) -> List[Dict]:
             "url": f"{base}/api/v1/assistant/chat",
             "kwargs": {
                 "json": {
-                    "message": "Quel est le statut du dernier job?",
+                    "message": "What is the status of the latest job?",
                     "history": [],
                     "context": {},
                 }
@@ -156,23 +156,23 @@ def _print_stats(s: LatencyStats) -> None:
         f"\n{'─' * 60}\n"
         f"  {s.endpoint}\n"
         f"{'─' * 60}\n"
-        f"  Requetes : {s.n_total}  |  Succes : {s.n_success}  |  Erreurs : {s.n_error} ({s.error_rate_pct:.1f}%)\n"
+        f"  Requests: {s.n_total}  |  Success: {s.n_success}  |  Errors: {s.n_error} ({s.error_rate_pct:.1f}%)\n"
         f"  Min    : {s.min_ms:>8.1f} ms\n"
-        f"  Moyenne: {s.mean_ms:>8.1f} ms\n"
+        f"  Mean   : {s.mean_ms:>8.1f} ms\n"
         f"  p50    : {s.median_ms:>8.1f} ms\n"
         f"  p75    : {s.p75_ms:>8.1f} ms\n"
         f"  p90    : {s.p90_ms:>8.1f} ms\n"
         f"  p95    : {s.p95_ms:>8.1f} ms  (SLA: <={s.sla_p95_ms:.0f} ms)\n"
         f"  p99    : {s.p99_ms:>8.1f} ms  (SLA: <={s.sla_p99_ms:.0f} ms)\n"
         f"  Max    : {s.max_ms:>8.1f} ms\n"
-        f"  Ecart-type: {s.std_ms:.1f} ms\n"
-        f"  Debit  : {s.throughput_rps:.2f} req/s\n"
+        f"  Std dev: {s.std_ms:.1f} ms\n"
+        f"  Throughput: {s.throughput_rps:.2f} req/s\n"
         f"  [{sla_badge}]\n"
     )
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Benchmark de latence - Zaynb Backend")
+    p = argparse.ArgumentParser(description="Latency benchmark - GermlineIQ backend")
     p.add_argument("--url", default=None)
     p.add_argument("--iterations", type=int, default=None)
     p.add_argument("--warmup", type=int, default=None)

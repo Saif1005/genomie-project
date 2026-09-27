@@ -1,1 +1,1 @@
-"""Routeurs FastAPI : analyses, jobs, assistant, système."""
+"""FastAPI routers: analyses, jobs, assistant, system."""

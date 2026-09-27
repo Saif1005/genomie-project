@@ -299,7 +299,7 @@ function startRaf(active: ActivePaths): void {
   rafId = requestAnimationFrame(tick);
 }
 
-/** Une seule traversée de la flèche (0→1), puis arrêt — indique exécution one-shot */
+/** A single traversal of the arrow (0→1), then stop — indicates a one-shot execution */
 function startOneShotRaf(active: ActivePaths): void {
   cancelAnimationFrame(rafId);
   particles = [];
@@ -389,7 +389,7 @@ export function applyWorkflowStep(
     styleActivePath(delPath, flowColor, delKind);
     active.delegation.push(delPath);
     if (isOneShot) {
-      addPathLabel(svg, delPath, '1× délégation unique', ONE_SHOT_COLOR);
+      addPathLabel(svg, delPath, '1× single delegation', ONE_SHOT_COLOR);
     } else if (isValidation) {
       addPathLabel(svg, delPath, '✓ Validation orchestrateur', VALIDATION_COLOR);
     }

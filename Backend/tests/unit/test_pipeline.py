@@ -1,4 +1,4 @@
-"""Pipeline germinal : commandes générées et reprise sur incident (sans Docker ni GPU)."""
+"""Germline pipeline: generated commands and crash recovery (no Docker or GPU)."""
 
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from src.pipeline.reference import ReferenceBundle
 
 def test_bwa_alignment_is_deterministic_and_streamed():
     cmd = C.bwa_align_sort("/ref/hg38.fa", "/p/R1.fq.gz", "/p/R2.fq.gz", "/o/raw.bam", "P1", 16)
-    assert "-K 100000000" in cmd  # résultat indépendant du nombre de threads
+    assert "-K 100000000" in cmd  # result independent of the number of threads
     assert "| samtools sort" in cmd and ".sam" not in cmd
     assert "SM:P1" in cmd
 
@@ -36,6 +36,9 @@ def test_parabricks_fq2bam_builds_bqsr_table_in_one_pass():
     assert "--low-memory" in args
     no_sites = C.pbrun_fq2bam("/r.fa", "/R1", "/R2", "/o.bam", "P1", [], None, low_memory=False)
     assert "--knownSites" not in no_sites and "--out-recal-file" not in no_sites
+    assert "--out-duplicate-metrics" not in no_sites
+    with_dup = C.pbrun_fq2bam("/r.fa", "/R1", "/R2", "/o.bam", "P1", [], None, False, duplicate_metrics="/o/dup.txt")
+    assert with_dup[with_dup.index("--out-duplicate-metrics") + 1] == "/o/dup.txt"
 
 
 def test_postprocess_normalizes_then_filters_snvs_and_indels_separately():
@@ -47,7 +50,7 @@ def test_postprocess_normalizes_then_filters_snvs_and_indels_separately():
 
 
 class FakeExecutor:
-    """Simule chaque étape en créant les fichiers de sortie attendus ; peut échouer à la demande."""
+    """Simulates each step by creating the expected output files; can fail on demand."""
 
     def __init__(self, pipeline_ref, fail_on=None):
         self.ran = []
@@ -58,7 +61,7 @@ class FakeExecutor:
         step = next(s for s in self.pipeline_ref["steps"] if s.command == command)
         self.ran.append(step.name)
         if step.name == self.fail_on:
-            return CommandResult(1, "", "erreur simulée")
+            return CommandResult(1, "", "simulated error")
         for out in step.outputs:
             Path(out).parent.mkdir(parents=True, exist_ok=True)
             Path(out).write_text(step.name)
@@ -84,7 +87,7 @@ def _pipeline(inputs, backend, fail_on=None):
 
 def test_cpu_pipeline_resumes_after_failure(inputs):
     pipeline, executor, out = _pipeline(inputs, BACKEND_CPU, fail_on="haplotypecaller")
-    with pytest.raises(PipelineError, match="erreur simulée"):
+    with pytest.raises(PipelineError, match="simulated error"):
         pipeline.run("P1", str(inputs / "R1.fq.gz"), str(inputs / "R2.fq.gz"), out)
     assert executor.ran == ["align", "markdup", "finalize_bam", "haplotypecaller"]
 
@@ -92,13 +95,32 @@ def test_cpu_pipeline_resumes_after_failure(inputs):
     result = pipeline.run("P1", str(inputs / "R1.fq.gz"), str(inputs / "R2.fq.gz"), out)
     assert result.steps_resumed == ["align", "markdup", "finalize_bam"]
     assert executor.ran == ["haplotypecaller", "postprocess"]
-    assert not (out / "work").exists()  # intermédiaires nettoyés
+    assert not (out / "work").exists()  # intermediates cleaned up
 
 
 def test_changed_fastq_invalidates_checkpoints(inputs):
     pipeline, _, out = _pipeline(inputs, BACKEND_GPU)
     pipeline.run("P1", str(inputs / "R1.fq.gz"), str(inputs / "R2.fq.gz"), out)
-    (inputs / "R1.fq.gz").write_text("nouveau contenu, taille différente")
+    (inputs / "R1.fq.gz").write_text("new content, different size")
     pipeline, executor, out = _pipeline(inputs, BACKEND_GPU)
     pipeline.run("P1", str(inputs / "R1.fq.gz"), str(inputs / "R2.fq.gz"), out)
     assert executor.ran == ["fq2bam", "haplotypecaller", "postprocess"]
+
+
+def test_containers_run_as_the_service_user(monkeypatch):
+    from config.settings import container_user
+
+    monkeypatch.delenv("CONTAINER_USER", raising=False)
+    user = container_user()
+    assert user and user.count(":") == 1
+    args = C.DockerSpec("img", ["/data"], user=user).prefix()
+    assert args[args.index("--user") + 1] == user
+    monkeypatch.setenv("CONTAINER_USER", "root")
+    assert container_user() is None
+    assert "--user" not in C.DockerSpec("img", ["/data"], user=None).prefix()
+
+
+def test_parabricks_uses_a_writable_tmp_dir():
+    fq = C.pbrun_fq2bam("/r.fa", "/R1", "/R2", "/o.bam", "P1", [], None, False, tmp_dir="/o/work")
+    hc = C.pbrun_haplotypecaller("/r.fa", "/o.bam", "/o.vcf", "/p.bed", None, tmp_dir="/o/work")
+    assert fq[fq.index("--tmp-dir") + 1] == "/o/work" and hc[hc.index("--tmp-dir") + 1] == "/o/work"

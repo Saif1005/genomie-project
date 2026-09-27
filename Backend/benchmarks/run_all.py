@@ -1,10 +1,10 @@
 ﻿"""
-run_all.py - Point d'entree unique pour tous les benchmarks.
+run_all.py - Single entry point for the API latency/load benchmarks (see also benchmarks.multiagent).
 
 Usage:
     python -m benchmarks.run_all
     python -m benchmarks.run_all --suite latency --iterations 50
-    python -m benchmarks.run_all --url http://mon-serveur:8000 --suite all
+    python -m benchmarks.run_all --url http://my-server:8000 --suite all
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def run_all(cfg: BenchmarkConfig, suite: str = "all") -> None:
 
     print(f"""
 +--------------------------------------------------------------+
-|      ZAYNB GENOMIC BACKEND  -  SUITE DE BENCHMARKS          |
+|      GERMLINEIQ GENOMIC BACKEND  -  SUITE DE BENCHMARKS          |
 |                   Projet de Doctorat                         |
 +--------------------------------------------------------------+
 
@@ -43,7 +43,7 @@ def run_all(cfg: BenchmarkConfig, suite: str = "all") -> None:
 
     if suite in ("latency", "all"):
         print("\n" + "─" * 60)
-        print("  [1/3] BENCHMARK DE LATENCE SEQUENTIELLE")
+        print("  [1/3] SEQUENTIAL LATENCY BENCHMARK")
         print("─" * 60)
         from benchmarks.latency_benchmark import run_latency_benchmark
         latency_stats = run_latency_benchmark(cfg)
@@ -52,7 +52,7 @@ def run_all(cfg: BenchmarkConfig, suite: str = "all") -> None:
 
     if suite in ("load", "all"):
         print("\n" + "─" * 60)
-        print("  [2/3] TEST DE CHARGE CONCURRENT")
+        print("  [2/3] CONCURRENT LOAD TEST")
         print("─" * 60)
         from benchmarks.load_test import run_load_test
         load_stats_map = run_load_test(cfg)
@@ -60,19 +60,19 @@ def run_all(cfg: BenchmarkConfig, suite: str = "all") -> None:
 
     if suite in ("pipeline", "all"):
         print("\n" + "─" * 60)
-        print("  [3/3] BENCHMARK PIPELINE BOUT-EN-BOUT")
+        print("  [3/3] END-TO-END PIPELINE BENCHMARK")
         print("─" * 60)
         from benchmarks.pipeline_benchmark import run_pipeline_benchmark
         run_pipeline_benchmark(cfg, n_runs=3)
 
     total = time.perf_counter() - start
-    print(f"\n  Suite '{suite}' terminee en {total:.1f}s")
+    print(f"\n  Suite '{suite}' finished in {total:.1f}s")
     print(f"  Rapports : {Path(cfg.results_dir).resolve()}\n")
 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Runner de benchmarks - Zaynb Genomic Backend",
+        description="Benchmark runner - GermlineIQ backend",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemples:

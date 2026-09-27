@@ -1,1 +1,1 @@
-"""Schémas Pydantic des sorties de l'API (rapport clinique)."""
+"""Pydantic schemas of the API outputs (clinical report)."""

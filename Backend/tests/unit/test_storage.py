@@ -1,4 +1,4 @@
-"""Tests de la couche StorageBackend (mode local)."""
+"""Tests of the StorageBackend layer (local mode)."""
 
 import pytest
 
@@ -16,21 +16,21 @@ def test_validate_accepts_file_under_root(storage, tmp_path):
     f.parent.mkdir(parents=True)
     f.write_bytes(b"@r\nACGT\n+\nIIII\n")
     assert storage.validate_input_uri(str(f)) == str(f)
-    # Chemin relatif à la racine
+    # Path relative to the root
     assert storage.validate_input_uri("patients/P1/input/R1.fastq.gz") == str(f)
 
 
 def test_validate_rejects_outside_root(storage, tmp_path):
-    with pytest.raises(ValueError, match="hors de LOCAL_DATA_ROOT"):
+    with pytest.raises(ValueError, match="outside LOCAL_DATA_ROOT"):
         storage.validate_input_uri("/etc/passwd")
-    with pytest.raises(ValueError, match="hors de LOCAL_DATA_ROOT"):
+    with pytest.raises(ValueError, match="outside LOCAL_DATA_ROOT"):
         storage.validate_input_uri("patients/../../etc/passwd")
 
 
 def test_validate_rejects_s3_and_missing(storage):
-    with pytest.raises(ValueError, match="S3 non supportée"):
+    with pytest.raises(ValueError, match="S3 URI not supported"):
         storage.validate_input_uri("s3://bucket/key.vcf")
-    with pytest.raises(ValueError, match="introuvable"):
+    with pytest.raises(ValueError, match="not found"):
         storage.validate_input_uri("patients/P1/input/absent.vcf")
 
 
@@ -42,7 +42,7 @@ def test_put_copies_and_move(storage, tmp_path):
     uri = storage.put(str(src), key)
     assert uri == str(tmp_path / key)
     assert src.exists()
-    # put sur lui-même = no-op
+    # put onto itself = no-op
     assert storage.put(uri, key) == uri
     moved = storage.put(str(src), storage.key_for("P1", "input", "m.json"), move=True)
     assert not src.exists() and (tmp_path / "patients/P1/input/m.json").exists()

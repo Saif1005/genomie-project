@@ -1,4 +1,4 @@
-"""Jobs d'analyse : file d'exécution + état persisté sur disque (survit à un redémarrage)."""
+"""Analysis jobs: execution queue + state persisted on disk (survives a restart)."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def _now() -> str:
 
 
 class JobStore:
-    """Un fichier JSON par job sous tmp/jobs (écriture atomique)."""
+    """One JSON file per job under tmp/jobs (atomic writes)."""
 
     def __init__(self, directory: Path):
         self.dir = directory
@@ -44,8 +44,8 @@ class JobStore:
             except json.JSONDecodeError:
                 continue
             if job.get("status") in (JobStatus.QUEUED.value, JobStatus.RUNNING.value):
-                job.update(status=JobStatus.FAILED.value, error="Interrompu par un redémarrage du serveur",
-                           progress_message="Interrompu — relancez l'analyse (les étapes faites seront reprises)")
+                job.update(status=JobStatus.FAILED.value, error="Interrupted by a server restart",
+                           progress_message="Interrupted — relaunch the analysis (completed steps will be resumed)")
                 self._write(job)
             self._jobs[job["job_id"]] = job
 
@@ -58,7 +58,7 @@ class JobStore:
         job_id = str(uuid.uuid4())
         job = {
             "job_id": job_id, "patient_id": patient_id, "mode": mode, "vcf_path": vcf_path, "plan": plan,
-            "status": JobStatus.QUEUED.value, "current_step": None, "progress_message": "En file d'attente",
+            "status": JobStatus.QUEUED.value, "current_step": None, "progress_message": "Queued",
             "created_at": _now(), "updated_at": _now(), "steps_completed": [], "error": None, "result": None,
         }
         with self._lock:
@@ -80,9 +80,15 @@ class JobStore:
             job = self._jobs.get(job_id)
             return dict(job) if job else None
 
+    def list(self) -> List[Dict[str, Any]]:
+        """All jobs, most recent first."""
+        with self._lock:
+            jobs = [dict(j) for j in self._jobs.values()]
+        return sorted(jobs, key=lambda j: j.get("created_at", ""), reverse=True)
+
 
 class JobService:
-    """Exécute les analyses une par une (GPU/CPU partagés) sans bloquer l'API."""
+    """Runs analyses one at a time (shared GPU/CPU) without blocking the API."""
 
     def __init__(self, store: JobStore):
         self.store = store
@@ -92,41 +98,44 @@ class JobService:
         def callback(step: str, phase: str, duration: Optional[float] = None) -> None:
             label = _LABELS.get(step, step)
             if phase == "running":
-                self.store.update(job_id, current_step=step, progress_message=f"En cours : {label}")
+                self.store.update(job_id, current_step=step, progress_message=f"Running: {label}")
             elif phase == "completed":
                 done = list((self.store.get(job_id) or {}).get("steps_completed", []))
                 if step not in done:
                     done.append(step)
                 suffix = f" ({duration:.0f}s)" if duration else ""
-                self.store.update(job_id, steps_completed=done, progress_message=f"Terminé : {label}{suffix}")
+                self.store.update(job_id, steps_completed=done, progress_message=f"Completed: {label}{suffix}")
             elif phase == "failed":
-                self.store.update(job_id, progress_message=f"Échec : {label}")
+                self.store.update(job_id, progress_message=f"Failed: {label}")
 
         return callback
 
     def _run(self, job_id: str, context: Dict[str, Any]) -> None:
-        self.store.update(job_id, status=JobStatus.RUNNING, progress_message="Démarrage de l'orchestrateur")
+        self.store.update(job_id, status=JobStatus.RUNNING, progress_message="Starting the orchestrator")
         try:
             result = Orchestrator(on_step=self._on_step(job_id)).run(context)
-        except Exception as e:  # jamais de job bloqué en « running »
+        except Exception as e:  # never leave a job stuck in "running"
             logger.exception(f"job={job_id}")
-            self.store.update(job_id, status=JobStatus.FAILED, error=str(e), current_step=None, progress_message="Erreur")
+            self.store.update(job_id, status=JobStatus.FAILED, error=str(e), current_step=None, progress_message="Error")
             return
         self.store.update(
             job_id,
             status=JobStatus.COMPLETED if result.success else JobStatus.FAILED,
             steps_completed=result.steps_completed,
             current_step=None,
-            progress_message=f"Terminé en {result.duration:.0f}s" if result.success else "Échec",
+            progress_message=f"Completed in {result.duration:.0f}s" if result.success else "Failed",
             error=result.error,
             result=result.context.get(K.CLINICAL_REPORT),
+            step_timings=[step.to_dict() for step in result.steps],
+            duration_s=round(result.duration, 2),
+            router=result.router,
         )
 
     def submit(self, job_id: str, context: Dict[str, Any]) -> None:
         self._executor.submit(self._run, job_id, context)
 
     def submit_upload(self, job_id: str, patient_id: str, files: List[Path], train_llm: bool) -> None:
-        """FASTQ reçus par upload : déplacés dans patients/<ID>/input puis analysés."""
+        """Uploaded FASTQ files: moved to patients/<ID>/input, then analysed."""
 
         def task() -> None:
             storage = get_storage()
@@ -136,7 +145,7 @@ class JobService:
                     for f in files
                 ]
             except Exception as e:
-                self.store.update(job_id, status=JobStatus.FAILED, error=str(e), progress_message="Échec de l'enregistrement")
+                self.store.update(job_id, status=JobStatus.FAILED, error=str(e), progress_message="Upload storage failed")
                 return
             finally:
                 if files:

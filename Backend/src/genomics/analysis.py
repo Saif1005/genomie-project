@@ -1,7 +1,7 @@
-"""Analyse du panel sein : variants appelés × annotation ClinVar × contrôle qualité.
+"""Breast panel analysis: called variants × ClinVar annotation × quality control.
 
-Fonction pure et déterministe : mêmes entrées (VCF, panel, version ClinVar, seuils) → même
-résultat, trié par position génomique.
+Pure, deterministic function: same inputs (VCF, panel, ClinVar version, thresholds) → same
+result, sorted by genomic position.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from src.genomics.panel import Gene, GenePanel, PENETRANCE_HIGH
 from src.genomics.qc import QCResult, QCThresholds, assess
 from src.genomics.variant import Variant, chrom_sort_key
 
-# Conséquences perte de fonction (termes Sequence Ontology VEP / SnpEff)
+# Loss-of-function consequences (Sequence Ontology terms, VEP / SnpEff)
 LOF_CONSEQUENCES = (
     "frameshift",
     "stop_gained",
@@ -22,6 +22,28 @@ LOF_CONSEQUENCES = (
     "splice_donor",
     "start_lost",
     "transcript_ablation",
+)
+
+# Category of every panel variant (full table and statistics)
+CATEGORY_CONFIRMED = "pathogenic_confirmed"
+CATEGORY_TO_CONFIRM = "pathogenic_to_confirm"
+CATEGORY_LOF_TO_CONFIRM = "lof_to_confirm"
+CATEGORY_CONFLICTING = "conflicting"
+CATEGORY_VUS = "vus"
+CATEGORY_LIKELY_BENIGN = "likely_benign"
+CATEGORY_BENIGN = "benign"
+CATEGORY_OTHER = "other_clinvar"
+CATEGORY_NOT_IN_CLINVAR = "not_in_clinvar"
+CATEGORIES = (
+    CATEGORY_CONFIRMED,
+    CATEGORY_TO_CONFIRM,
+    CATEGORY_LOF_TO_CONFIRM,
+    CATEGORY_CONFLICTING,
+    CATEGORY_VUS,
+    CATEGORY_LIKELY_BENIGN,
+    CATEGORY_BENIGN,
+    CATEGORY_OTHER,
+    CATEGORY_NOT_IN_CLINVAR,
 )
 
 
@@ -32,6 +54,7 @@ class Finding:
     clinvar: Optional[ClinVarRecord]
     qc: QCResult
     note: Optional[str] = None
+    category: str = CATEGORY_NOT_IN_CLINVAR
 
     @property
     def is_high_penetrance(self) -> bool:
@@ -69,6 +92,7 @@ class Finding:
             "annotation_source": c.source if c else None,
             "is_pathogenic": bool(c and c.is_pathogenic),
             "note": self.note,
+            "category": self.category,
             "variant": v.to_dict(),
         }
 
@@ -93,6 +117,8 @@ class PanelAnalysis:
     vus: List[Finding] = field(default_factory=list)
     conflicting: List[Finding] = field(default_factory=list)
     somatic_genes_skipped: int = 0
+    # Every germline panel variant, benign included (not in to_dict: historical output unchanged)
+    all_findings: List[Finding] = field(default_factory=list)
 
     @property
     def identified_genes(self) -> List[str]:
@@ -144,7 +170,7 @@ def analyze_panel(
     )
     for v in variants:
         if not v.is_called:
-            continue  # allèle non porté par l'échantillon (GT 0/0, ./.)
+            continue  # allele not carried by the sample (GT 0/0, ./.)
         rec = annotator.annotate(v)
         gene = _resolve_gene(v, rec, panel, breast)
         if gene is None:
@@ -157,26 +183,42 @@ def analyze_panel(
         sig = rec.significance if rec else None
 
         if rec and rec.is_pathogenic:
-            (result.confirmed if qc.passed else result.to_confirm).append(Finding(v, gene, rec, qc))
+            finding = Finding(v, gene, rec, qc, category=CATEGORY_CONFIRMED if qc.passed else CATEGORY_TO_CONFIRM)
+            (result.confirmed if qc.passed else result.to_confirm).append(finding)
         elif sig == ClinicalSignificance.CONFLICTING:
-            result.conflicting.append(Finding(v, gene, rec, qc))
+            finding = Finding(v, gene, rec, qc, category=CATEGORY_CONFLICTING)
+            result.conflicting.append(finding)
         elif _is_lof(v) and sig not in (ClinicalSignificance.BENIGN, ClinicalSignificance.LIKELY_BENIGN):
-            # Perte de fonction non classée pathogène : à évaluer par un généticien (critère PVS1)
-            result.to_confirm.append(
-                Finding(v, gene, rec, qc, note="Variant perte de fonction non classé pathogène dans ClinVar")
+            # Loss of function not classified pathogenic: to be assessed by a geneticist (PVS1 criterion)
+            finding = Finding(
+                v, gene, rec, qc,
+                note="Loss-of-function variant not classified as pathogenic in ClinVar",
+                category=CATEGORY_LOF_TO_CONFIRM,
             )
+            result.to_confirm.append(finding)
         elif sig == ClinicalSignificance.VUS:
-            result.vus.append(Finding(v, gene, rec, qc))
+            finding = Finding(v, gene, rec, qc, category=CATEGORY_VUS)
+            result.vus.append(finding)
+        elif sig == ClinicalSignificance.BENIGN:
+            finding = Finding(v, gene, rec, qc, category=CATEGORY_BENIGN)
+        elif sig == ClinicalSignificance.LIKELY_BENIGN:
+            finding = Finding(v, gene, rec, qc, category=CATEGORY_LIKELY_BENIGN)
+        elif rec is not None:
+            finding = Finding(v, gene, rec, qc, category=CATEGORY_OTHER)
+        else:
+            finding = Finding(v, gene, rec, qc, category=CATEGORY_NOT_IN_CLINVAR)
+        result.all_findings.append(finding)
 
     result.confirmed = _sorted(result.confirmed)
     result.to_confirm = _sorted(result.to_confirm)
     result.vus = _sorted(result.vus)
     result.conflicting = _sorted(result.conflicting)
+    result.all_findings = _sorted(result.all_findings)
     return result
 
 
 def to_vcf_metrics(analysis: Dict, patient_id: str) -> Dict:
-    """Format « vcf_metrics » (metadata / summary / variants) consommé par la préparation LoRA."""
+    """"vcf_metrics" format (metadata / summary / variants) consumed by the LoRA data preparation."""
     reported = analysis.get("confirmed", []) + analysis.get("to_confirm", [])
     depths = sorted(f["dp"] for f in reported if f.get("dp") is not None)
     median_dp = depths[len(depths) // 2] if depths else None
@@ -184,7 +226,7 @@ def to_vcf_metrics(analysis: Dict, patient_id: str) -> Dict:
         "metadata": {
             "patient_id": patient_id,
             "coverage": median_dp,
-            "coverage_definition": "profondeur médiane des variants rapportés (pas la couverture du panel)",
+            "coverage_definition": "median depth of reported variants (not panel coverage)",
             "variant_count": analysis.get("variants_in_panel", 0),
             "pathogenic_count": len(analysis.get("confirmed", [])),
             "breast_cancer_detected": bool(analysis.get("confirmed")),

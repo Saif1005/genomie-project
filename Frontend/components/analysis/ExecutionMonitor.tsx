@@ -36,7 +36,7 @@ export default function ExecutionMonitor({
   const status = job?.status ?? 'queued';
   const stepsCompleted = job?.steps_completed ?? [];
   const currentStep = job?.current_step;
-  // Étapes réellement planifiées par l'orchestrateur (ex. VCF fourni : pas d'alignement)
+  // Steps actually planned by the orchestrator (e.g. provided VCF: no alignment)
   const steps = plannedSteps(job?.plan);
 
   const completedCount = steps.filter((s) =>
@@ -49,7 +49,7 @@ export default function ExecutionMonitor({
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            Suivi d&apos;exécution
+            Execution tracking
           </h2>
           <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">
             job_id: {jobId}
@@ -65,7 +65,7 @@ export default function ExecutionMonitor({
 
       <div className="mb-8">
         <div className="mb-2 flex justify-between text-xs font-medium text-slate-600 dark:text-slate-400">
-          <span>Progression globale</span>
+          <span>Overall progress</span>
           <span className="font-mono">{progressPct}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
@@ -129,7 +129,7 @@ export default function ExecutionMonitor({
       {isLoading && !job && (
         <p className="mt-4 flex items-center gap-2 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Connexion au job…
+          Connecting to the job…
         </p>
       )}
 
@@ -154,10 +154,10 @@ function StatusBadge({ status }: { status: string }) {
       'border-clinical-high/40 bg-clinical-high/10 text-clinical-high',
   };
   const labels: Record<string, string> = {
-    queued: 'En file',
-    running: 'En cours',
-    completed: 'Terminé',
-    failed: 'Échec',
+    queued: 'Queued',
+    running: 'Running',
+    completed: 'Completed',
+    failed: 'Failed',
   };
   return (
     <span
@@ -170,10 +170,10 @@ function StatusBadge({ status }: { status: string }) {
 
 function StepLabel({ state }: { state: ReturnType<typeof stepState> }) {
   const map = {
-    pending: 'En attente',
-    active: 'En cours',
-    done: 'Terminé',
-    failed: 'Échec',
+    pending: 'Pending',
+    active: 'Running',
+    done: 'Done',
+    failed: 'Failed',
   };
   const colors = {
     pending: 'text-slate-400',

@@ -1,4 +1,4 @@
-"""Gestionnaire VRAM GPU avec mutex d'exclusion (VRAM réelle détectée via nvidia-smi)."""
+"""GPU VRAM manager with a mutual-exclusion lock (real VRAM detected through nvidia-smi)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,15 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Generator, List, Optional
 from urllib.request import Request, urlopen
+
+
+def nvidia_smi() -> str:
+    """nvidia-smi path: PATH first, then the WSL2 location (absent from systemd's minimal PATH)."""
+    import shutil
+
+    return shutil.which("nvidia-smi") or next(
+        (p for p in ("/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi") if os.path.isfile(p)), "nvidia-smi"
+    )
 
 from loguru import logger
 
@@ -31,13 +40,13 @@ class GPUPhase(str, Enum):
 
 
 class GPUMutexError(RuntimeError):
-    """Le GPU est déjà verrouillé par une autre phase."""
+    """The GPU is already locked by another phase."""
 
 
 class GPUManager:
     """
-    Orchestration VRAM déterministe avec mutex :
-    Ollama suspendu → Parabricks (--gpus all) → destroy container → empty_cache → BioGPT.
+    Deterministic VRAM orchestration with a mutex:
+    Ollama suspended → Parabricks (--gpus all) → container destroyed → empty_cache → BioGPT.
     """
 
     def __init__(self) -> None:
@@ -55,8 +64,8 @@ class GPUManager:
         with self._lock:
             if self._phase != GPUPhase.IDLE and self._phase != phase:
                 raise GPUMutexError(
-                    f"GPU occupé par {self._phase.value} (holder={self._holder}), "
-                    f"impossible d'acquérir {phase.value}"
+                    f"GPU busy with {self._phase.value} (holder={self._holder}), "
+                    f"cannot acquire {phase.value}"
                 )
             self._phase = phase
             self._holder = holder
@@ -71,7 +80,7 @@ class GPUManager:
 
     @contextmanager
     def gpu_phase(self, phase: GPUPhase, agent: str) -> Generator[None, None, None]:
-        """Verrou d'exclusion mutuelle pour une phase GPU."""
+        """Mutual-exclusion lock for a GPU phase."""
         if phase == GPUPhase.PARABRICKS:
             self.prepare_for_parabricks()
         elif phase == GPUPhase.BIOGPT:
@@ -108,7 +117,7 @@ class GPUManager:
         try:
             out = subprocess.check_output(
                 [
-                    "nvidia-smi",
+                    nvidia_smi(),
                     "--query-gpu=memory.used,memory.total,utilization.gpu",
                     "--format=csv,noheader,nounits",
                 ],
@@ -133,7 +142,7 @@ class GPUManager:
         duration_s: Optional[float] = None,
         **extra: Any,
     ) -> Dict[str, Any]:
-        """Log structuré JSON à chaque transition d'agent."""
+        """Structured JSON log at every agent transition."""
         vram = self.get_vram_stats()
         entry: Dict[str, Any] = {
             "event": "agent_transition",
@@ -177,7 +186,7 @@ class GPUManager:
             with urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except (OSError, ValueError) as e:  # URLError, timeout, JSON invalide
-            logger.warning(f"Ollama indisponible ({url}): {e}")
+            logger.warning(f"Ollama unavailable ({url}): {e}")
             return {}
 
     def _ollama_running_models(self) -> List[str]:
@@ -190,7 +199,7 @@ class GPUManager:
             return []
 
     def suspend_ollama_models(self) -> None:
-        """a) Suspension Ollama/Mistral — libération totale VRAM."""
+        """a) Suspend Ollama/Mistral — free all VRAM."""
         with self._lock:
             models = self._ollama_running_models() or [self.orchestrator_model]
             for model in models:
@@ -211,20 +220,20 @@ class GPUManager:
             self.log_transition_json("ollama", "SUSPENDED", models=models)
 
     def prepare_for_parabricks(self) -> None:
-        """Séquence pré-Parabricks : suspend Ollama + vide cache CUDA."""
+        """Pre-Parabricks sequence: suspend Ollama + empty the CUDA cache."""
         self.log_transition_json("gpu_manager", "PRE_PARABRICKS_START")
         self.suspend_ollama_models()
         self.empty_cuda_cache()
         self.log_transition_json("gpu_manager", "PRE_PARABRICKS_READY")
 
     def _vram_allows_sharing(self) -> bool:
-        """True si la VRAM réelle permet à Ollama (Mistral) et BioGPT de cohabiter."""
+        """True if the real VRAM lets Ollama (Mistral) and BioGPT coexist."""
         shared_gb = float(os.getenv("GPU_SHARED_VRAM_GB", "24"))
         max_mb = max((g["vram_mb"] for g in gpu_inventory()), default=0.0)
         return max_mb / 1024 >= shared_gb
 
     def prepare_for_biogpt(self) -> None:
-        """e) Prépare VRAM pour BioGPT après Parabricks."""
+        """e) Prepare VRAM for BioGPT after Parabricks."""
         if self._vram_allows_sharing():
             self.log_transition_json("gpu_manager", "OLLAMA_KEPT_VRAM_SUFFICIENT")
         else:
@@ -269,7 +278,7 @@ _gpu_inventory_cache: Optional[List[Dict[str, Any]]] = None
 
 
 def gpu_inventory(refresh: bool = False) -> List[Dict[str, Any]]:
-    """GPUs NVIDIA réellement visibles (nvidia-smi) — liste vide si aucun."""
+    """NVIDIA GPUs actually visible (nvidia-smi) — empty list if none."""
     global _gpu_inventory_cache
     if _gpu_inventory_cache is not None and not refresh:
         return _gpu_inventory_cache
@@ -277,7 +286,7 @@ def gpu_inventory(refresh: bool = False) -> List[Dict[str, Any]]:
     try:
         out = subprocess.check_output(
             [
-                "nvidia-smi",
+                nvidia_smi(),
                 "--query-gpu=name,memory.total,compute_cap",
                 "--format=csv,noheader,nounits",
             ],
@@ -303,10 +312,10 @@ def gpu_inventory(refresh: bool = False) -> List[Dict[str, Any]]:
 
 def select_pipeline_backend() -> Dict[str, Any]:
     """
-    Choisit le moteur FASTQ→VCF selon la VRAM réelle du serveur.
+    Chooses the FASTQ→VCF engine according to the server's real VRAM.
 
-    PIPELINE_BACKEND=auto (défaut) | parabricks | cpu
-    PARABRICKS_MIN_VRAM_GB : VRAM minimale par GPU exigée par Parabricks (16 Go).
+    PIPELINE_BACKEND=auto (default) | parabricks | cpu
+    PARABRICKS_MIN_VRAM_GB: minimum VRAM per GPU required by Parabricks (16 GB).
     """
     from config.settings import parabricks
 
@@ -325,39 +334,39 @@ def select_pipeline_backend() -> Dict[str, Any]:
     elif requested == "parabricks":
         info.update(backend="parabricks", reason="PIPELINE_BACKEND=parabricks")
     elif not gpus:
-        info.update(backend="cpu", reason="Aucun GPU NVIDIA détecté")
-    elif max_vram_gb + 1.0 < min_gb:  # tolérance : une carte « 16 Go » expose 15,0-15,9 Go (ex. 15 360 MiB)
+        info.update(backend="cpu", reason="No NVIDIA GPU detected")
+    elif max_vram_gb + 1.0 < min_gb:  # tolerance: a "16 GB" card exposes 15.0-15.9 GB (e.g. 15,360 MiB)
         info.update(
             backend="cpu",
-            reason=f"VRAM {max_vram_gb:.1f} Go < {min_gb:.0f} Go requis par Parabricks",
+            reason=f"VRAM {max_vram_gb:.1f} GB < {min_gb:.0f} GB required by Parabricks",
         )
     else:
-        info.update(backend="parabricks", reason=f"GPU {gpus[0]['name']} ({max_vram_gb:.1f} Go)")
+        info.update(backend="parabricks", reason=f"GPU {gpus[0]['name']} ({max_vram_gb:.1f} GB)")
     return info
 
 
 class CUDACompatibilityError(RuntimeError):
-    """CUDA requis mais indisponible ou incompatible."""
+    """CUDA required but unavailable or incompatible."""
 
 
 def assert_cuda_operational() -> Dict[str, Any]:
     if os.getenv("ALLOW_CPU_FALLBACK", "").lower() in ("1", "true", "yes"):
-        logger.warning("ALLOW_CPU_FALLBACK actif — skip vérification CUDA")
+        logger.warning("ALLOW_CPU_FALLBACK enabled — skipping the CUDA check")
         return {}
     if not HAS_TORCH:
         raise CUDACompatibilityError(
-            "PyTorch non installé. pip install torch --index-url "
+            "PyTorch not installed. pip install torch --index-url "
             "https://download.pytorch.org/whl/cu118"
         )
     if not torch.cuda.is_available():
-        raise CUDACompatibilityError("CUDA non disponible")
+        raise CUDACompatibilityError("CUDA not available")
     try:
         probe = torch.zeros(1, device="cuda")
         del probe
         torch.cuda.synchronize()
         _ = torch.cuda.get_device_name(0)
     except Exception as e:
-        raise CUDACompatibilityError(f"CUDA non opérationnel: {e}") from e
+        raise CUDACompatibilityError(f"CUDA not operational: {e}") from e
     stats = GPUManager().get_vram_stats()
     logger.info(json.dumps({"event": "cuda_check", "status": "ok", "vram": stats}))
     return stats

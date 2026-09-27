@@ -1,4 +1,4 @@
-# ZAYNB backend — dépendances d'exécution (serveur local)
+# GermlineIQ backend — runtime dependencies (local server)
 
 # API
 fastapi>=0.135.0
@@ -6,9 +6,9 @@ uvicorn[standard]>=0.30.0
 pydantic>=2.7.0,<3
 python-multipart>=0.0.9
 
-# Orchestration multi-agent (graphe planifier → exécuter)
+# Multi-agent orchestration (plan → execute graph)
 langgraph>=0.2.0
 
-# Utilitaires
+# Utilities
 loguru>=0.7.2
 python-dotenv>=1.0.0

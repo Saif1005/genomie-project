@@ -1,4 +1,4 @@
-"""Domaine scientifique : lecture VCF, ClinVar, QC, classification et risque."""
+"""Scientific domain: VCF reading, ClinVar, QC, classification and risk."""
 
 import gzip
 import shutil
@@ -102,7 +102,7 @@ def test_vcf_reader_restricts_to_regions_and_reads_gzip(tmp_path, panel):
         dst.write(src.read())
     regions = [(c, s, e) for c, s, e, _ in panel.intervals()]
     positions = [v.position for v in iter_variants(gz, regions)]
-    assert 1014143 not in positions  # chr1 hors panel, ignoré à la lecture
+    assert 1014143 not in positions  # chr1 outside the panel, skipped while reading
     assert 43057062 in positions
 
 
@@ -147,7 +147,7 @@ def test_low_vaf_pathogenic_is_indeterminate_not_low(panel, clinvar):
     analysis = _analyze("patient_brca2_lowvaf.vcf", panel, clinvar)
     assert analysis["confirmed"] == []
     assert analysis["to_confirm"][0]["gene"] == "BRCA2"
-    assert "VAF_BASSE_MOSAIQUE_OU_CHIP" in analysis["to_confirm"][0]["qc_flags"]
+    assert "LOW_VAF_MOSAIC_OR_CHIP" in analysis["to_confirm"][0]["qc_flags"]
     assert assess_risk(analysis).level is RiskLevel.INDETERMINATE
 
 
@@ -186,3 +186,37 @@ def test_analysis_is_deterministic(panel, clinvar):
     second = _analyze("patient_brca1_high.vcf", panel, clinvar)
     assert first == second
     assert assess_risk(first) == assess_risk(second)
+
+
+# --- germlineiq-rules-v1.1: coverage of pathogenic sites (FASTQ mode) --------------------
+def _cov(fraction_by_gene):
+    per = [{"gene": g, "sites": 100, "covered": int(f * 100), "fraction_covered": f} for g, f in fraction_by_gene.items()]
+    covered = sum(p["covered"] for p in per)
+    return {"min_depth": 15, "sites": 100 * len(per), "covered": covered, "fraction_covered": covered / (100 * len(per)), "per_gene": per}
+
+
+def _negative(panel, clinvar):
+    return analyze_panel(iter_variants(FIXTURES / "patient_negative.vcf"), panel, clinvar, QCThresholds()).to_dict()
+
+
+def test_insufficient_global_coverage_gives_indeterminate(panel, clinvar):
+    risk = assess_risk(_negative(panel, clinvar), _cov({"BRCA1": 0.0, "BRCA2": 0.2}))
+    assert risk.level is RiskLevel.INDETERMINATE
+    assert "insufficient coverage" in risk.conclusion
+
+
+def test_poorly_covered_gene_named_in_conclusion(panel, clinvar):
+    risk = assess_risk(_negative(panel, clinvar), _cov({"BRCA1": 1.0, "BRCA2": 1.0, "TP53": 0.92}))
+    assert risk.level is RiskLevel.LOW
+    assert "TP53" in risk.conclusion and "not excluded" in risk.conclusion
+    assert any("TP53 (92.0%)" in r for r in risk.rationale)
+
+
+def test_coverage_never_downgrades_a_confirmed_variant(panel, clinvar):
+    analysis = analyze_panel(iter_variants(FIXTURES / "patient_brca1_high.vcf"), panel, clinvar, QCThresholds()).to_dict()
+    assert assess_risk(analysis, _cov({"BRCA1": 0.0})).level is RiskLevel.HIGH
+
+
+def test_vcf_mode_without_coverage_unchanged(panel, clinvar):
+    risk = assess_risk(_negative(panel, clinvar))
+    assert risk.level is RiskLevel.LOW and "not measured" in risk.limitations[2]

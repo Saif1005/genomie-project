@@ -1,4 +1,4 @@
-﻿"""reporter.py - Generation de rapports JSON, CSV, HTML."""
+﻿"""reporter.py - JSON, CSV and HTML report generation."""
 
 from __future__ import annotations
 import csv
@@ -52,7 +52,7 @@ class BenchmarkReporter:
             "results": [s.to_dict() for s in stats],
         }
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        logger.info(f"Rapport JSON : {path}")
+        logger.info(f"JSON report: {path}")
 
     def _save_csv(self, stats: List[LatencyStats], stem: str) -> None:
         path = self.results_dir / f"{stem}.csv"
@@ -81,14 +81,14 @@ class BenchmarkReporter:
                     "sla_p99_ok": s.sla_p99_ok, "sla_error_rate_ok": s.sla_error_rate_ok,
                     "sla_pass": s.sla_pass,
                 })
-        logger.info(f"Rapport CSV : {path}")
+        logger.info(f"CSV report: {path}")
 
     def _save_html(self, stats: List[LatencyStats], stem: str, benchmark_type: str) -> None:
         path = self.results_dir / f"{stem}.html"
         try:
             html = self._build_html(stats, benchmark_type)
             path.write_text(html, encoding="utf-8")
-            logger.info(f"Rapport HTML : {path}")
+            logger.info(f"HTML report: {path}")
         except ImportError:
             logger.warning("plotly non installe - pip install plotly")
 
@@ -100,7 +100,7 @@ class BenchmarkReporter:
         endpoints = [s.endpoint for s in stats]
         fig = make_subplots(
             rows=2, cols=2,
-            subplot_titles=["Latence par percentile (ms)", "Throughput (req/s)", "Taux d'erreur (%)", "Min / Moy / Max"],
+            subplot_titles=["Latency per percentile (ms)", "Throughput (req/s)", "Error rate (%)", "Min / Mean / Max"],
         )
 
         for metric, color, lbl in [
@@ -122,7 +122,7 @@ class BenchmarkReporter:
         ), row=1, col=2)
 
         fig.add_trace(go.Bar(
-            name="Erreurs %", x=endpoints, y=[s.error_rate_pct for s in stats],
+            name="Errors %", x=endpoints, y=[s.error_rate_pct for s in stats],
             marker_color=["#F44336" if s.error_rate_pct > self.cfg.sla_error_rate_pct else "#4CAF50" for s in stats],
             showlegend=False,
             text=[f"{s.error_rate_pct:.1f}%" for s in stats], textposition="auto",
@@ -130,7 +130,7 @@ class BenchmarkReporter:
 
         for metric, color, name in [
             ("min_ms", "#4CAF50", "Min"),
-            ("mean_ms", "#2196F3", "Moyenne"),
+            ("mean_ms", "#2196F3", "Mean"),
             ("max_ms", "#F44336", "Max"),
         ]:
             fig.add_trace(go.Scatter(
@@ -144,7 +144,7 @@ class BenchmarkReporter:
         )
 
         fig.update_layout(
-            title_text=f"Benchmark Zaynb - {benchmark_type.upper()} - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            title_text=f"Benchmark GermlineIQ - {benchmark_type.upper()} - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             height=800, barmode="group", template="plotly_white",
         )
 
@@ -161,7 +161,7 @@ class BenchmarkReporter:
         chart_html = pio.to_html(fig, full_html=False, include_plotlyjs="cdn")
 
         return f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>Benchmark Zaynb - {benchmark_type}</title>
+<title>Benchmark GermlineIQ - {benchmark_type}</title>
 <style>
 body{{font-family:'Segoe UI',sans-serif;margin:2rem;background:#fafafa;color:#222}}
 h1{{color:#1565C0}}h2{{color:#37474F;border-bottom:2px solid #BBDEFB;padding-bottom:4px}}
@@ -171,7 +171,7 @@ td{{padding:7px 12px;border-bottom:1px solid #E0E0E0}}
 tr:hover{{background:#E3F2FD}}
 .meta{{background:#E3F2FD;border-left:4px solid #1565C0;padding:1rem;border-radius:4px;margin-bottom:1.5rem}}
 </style></head><body>
-<h1>Benchmark Zaynb Genomic Backend</h1>
+<h1>Benchmark GermlineIQ Genomic Backend</h1>
 <div class="meta">
 <strong>Type:</strong> {benchmark_type} &nbsp;|&nbsp;
 <strong>URL:</strong> {self.cfg.base_url} &nbsp;|&nbsp;
@@ -180,12 +180,12 @@ tr:hover{{background:#E3F2FD}}
 <strong>SLA:</strong> p50 &le; {self.cfg.sla_p50_ms:.0f}ms &nbsp;|&nbsp;
 p95 &le; {self.cfg.sla_p95_ms:.0f}ms &nbsp;|&nbsp;
 p99 &le; {self.cfg.sla_p99_ms:.0f}ms &nbsp;|&nbsp;
-Erreurs &le; {self.cfg.sla_error_rate_pct:.1f}%
+Errors &le; {self.cfg.sla_error_rate_pct:.1f}%
 </div>
-<h2>Graphiques</h2>{chart_html}
-<h2>Resultats (ms)</h2>
+<h2>Charts</h2>{chart_html}
+<h2>Results (ms)</h2>
 <table><thead><tr>
-<th>Endpoint</th><th>N</th><th>Erreurs</th><th>Min</th><th>Moy</th>
+<th>Endpoint</th><th>N</th><th>Errors</th><th>Min</th><th>Mean</th>
 <th>p50</th><th>p95</th><th>p99</th><th>Max</th><th>RPS</th><th>SLA</th>
 </tr></thead><tbody>{rows_html}</tbody></table>
 </body></html>"""

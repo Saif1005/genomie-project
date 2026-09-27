@@ -96,7 +96,7 @@ export default function AnimatedArchitecture() {
         if (!cancelled) {
           setStatus('error');
           setErrorMessage(
-            err instanceof Error ? err.message : 'Échec du rendu Mermaid'
+            err instanceof Error ? err.message : 'Mermaid rendering failed'
           );
         }
       }
@@ -151,7 +151,7 @@ export default function AnimatedArchitecture() {
       }
 
       setExporting(true);
-      setExportStatus('Démarrage de l’export…');
+      setExportStatus('Starting the export…');
       setPlaying(true);
       setStepIndex(-1);
       setCurrentStep(null);
@@ -173,7 +173,7 @@ export default function AnimatedArchitecture() {
         });
       } catch (err) {
         setExportStatus(
-          err instanceof Error ? err.message : 'Échec de l’export'
+          err instanceof Error ? err.message : 'Export failed'
         );
       } finally {
         setExporting(false);
@@ -189,10 +189,10 @@ export default function AnimatedArchitecture() {
         <div className={styles.headerRow}>
           <div>
             <h2 className={styles.title}>
-              Architecture Harness — Raisonnement ReAct &amp; flux de données
+              Multi-agent architecture — delegation &amp; data flow
             </h2>
             <p className={styles.subtitle}>
-              Bleu = délégation · Vert = tool · Violet = one-shot · Ambre = validation orchestrateur
+              Blue = delegation · Green = tool · Violet = one-shot · Amber = orchestrator validation
             </p>
           </div>
           <div className={styles.controls}>
@@ -202,14 +202,14 @@ export default function AnimatedArchitecture() {
               disabled={status !== 'ready' || playing || exporting}
               onClick={runSession}
             >
-              ▶ Démarrer la session
+              ▶ Start the session
             </button>
             <button
               type="button"
               className={`${styles.btn} ${styles.btnExport}`}
               disabled={status !== 'ready' || playing || exporting}
               onClick={() => exportSession('webm')}
-              title="Enregistre les 8 étapes et télécharge un fichier .webm"
+              title="Records the 8 steps and downloads a .webm file"
             >
               ⬇ WebM
             </button>
@@ -218,7 +218,7 @@ export default function AnimatedArchitecture() {
               className={`${styles.btn} ${styles.btnExport}`}
               disabled={status !== 'ready' || playing || exporting}
               onClick={() => exportSession('gif')}
-              title="Enregistre les 8 étapes et télécharge un fichier .gif"
+              title="Records the 8 steps and downloads a .gif file"
             >
               ⬇ GIF
             </button>
@@ -228,14 +228,14 @@ export default function AnimatedArchitecture() {
               disabled={status !== 'ready' || playing || exporting}
               onClick={reset}
             >
-              Réinitialiser
+              Reset
             </button>
           </div>
         </div>
       </header>
 
       {status === 'loading' && (
-        <p className={styles.loading}>Rendu Mermaid côté client…</p>
+        <p className={styles.loading}>Rendering Mermaid in the browser…</p>
       )}
       {status === 'error' && (
         <p className={styles.error}>Erreur : {errorMessage}</p>
@@ -257,22 +257,22 @@ export default function AnimatedArchitecture() {
           }`}
         >
           <span className={styles.bannerStep}>
-            Étape {stepIndex + 1}/{ARCH_WORKFLOW.length}
+            Step {stepIndex + 1}/{ARCH_WORKFLOW.length}
           </span>
           <strong>{currentStep.agent}</strong> — {currentStep.title}
           {currentStep.oneShot && (
             <span className={styles.oneShotBadge}>
-              1× ONE SHOT — cet agent s&apos;exécute une seule fois dans le pipeline
+              1× ONE SHOT — this agent runs only once in the pipeline
             </span>
           )}
           {currentStep.orchestratorValidation && (
             <span className={styles.validationBadge}>
-              ✓ VALIDATION — l&apos;orchestrateur valide le rapport avant livraison au client
+              ✓ VALIDATION — the orchestrator validates the report before delivery
             </span>
           )}
           {currentStep.tool && currentStep.toolName && (
             <span className={styles.toolBadge}>
-              {currentStep.oneShot ? '1×' : '⚙'} Exécution tool externe :{' '}
+              {currentStep.oneShot ? '1×' : '⚙'} External tool execution:{' '}
               <em>{currentStep.toolName}</em>
             </span>
           )}
@@ -282,8 +282,8 @@ export default function AnimatedArchitecture() {
 
       {!currentStep && status === 'ready' && !playing && (
         <div className={styles.bannerIdle}>
-          Cliquez sur « Démarrer la session » pour voir la délégation (bleu) et
-          l&apos;exécution des tools externes (vert)
+          Click “Start the session” to see delegation (blue) and
+          external tool execution (green)
         </div>
       )}
 
@@ -292,7 +292,7 @@ export default function AnimatedArchitecture() {
         <div
           ref={containerRef}
           className={styles.diagramHost}
-          aria-label="Diagramme architecture multi-agents animé"
+          aria-label="Animated multi-agent architecture diagram"
         />
       </div>
 
@@ -300,15 +300,15 @@ export default function AnimatedArchitecture() {
         <div className={styles.legend}>
           <div className={styles.legendItem}>
             <span className={styles.legendSwatchDelegation} />
-            Délégation agent → agent (bleu)
+            Agent → agent delegation (blue)
           </div>
           <div className={styles.legendItem}>
             <span className={styles.legendSwatchTool} />
-            Exécution tool externe (vert)
+            External tool execution (green)
           </div>
           <div className={styles.legendItem}>
             <span className={styles.legendSwatchOneShot} />
-            Exécution unique one-shot (violet, 1 passage)
+            One-shot execution (violet, single pass)
           </div>
           <div className={styles.legendItem}>
             <span className={styles.legendSwatchValidation} />

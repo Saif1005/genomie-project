@@ -1,6 +1,6 @@
-"""LLMTrainingAgent — ajoute l'exemple patient au jeu d'entraînement LoRA (outil optionnel, train_llm=true).
+"""LLMTrainingAgent — appends the patient example to the LoRA training set (optional tool, train_llm=true).
 
-Le fine-tuning lui-même se lance hors ligne, sur le serveur, à partir de ce fichier JSONL.
+Fine-tuning itself runs offline on the server (python -m src.llm.finetune).
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ class LLMTrainingAgent(BaseAgent):
         )
         path = paths().training_data
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "a", encoding="utf-8") as fh:  # ajout O(1), pas de réécriture du fichier
+        with open(path, "a", encoding="utf-8") as fh:  # O(1) append, no file rewrite
             fh.write(json.dumps(example, ensure_ascii=False, sort_keys=True, default=str) + "\n")
-        self.logger.info(f"Exemple d'entraînement ajouté : {path}")
+        self.logger.info(f"Training example appended: {path}")
         return AgentResult.ok(**{K.TRAINING_DATA: str(path)})

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 /**
- * Import SSR-safe pour Vercel : évite `window is not defined` au build/prerender.
+ * SSR-safe import: avoids `window is not defined` during build/prerender.
  */
 const AnimatedArchitecture = dynamic(() => import('./AnimatedArchitecture'), {
   ssr: false,
@@ -18,7 +18,7 @@ const AnimatedArchitecture = dynamic(() => import('./AnimatedArchitecture'), {
         border: '1px solid rgba(255,255,255,0.08)',
       }}
     >
-      Chargement du diagramme animé…
+      Loading the animated diagram…
     </div>
   ),
 });

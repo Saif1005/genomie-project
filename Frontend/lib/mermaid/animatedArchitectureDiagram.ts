@@ -1,4 +1,4 @@
-/** Diagramme Harness — chemins de raisonnement + charge utile par flèche */
+/** Harness diagram — reasoning paths + payload per arrow */
 export const ANIMATED_ARCHITECTURE_MERMAID = `
 flowchart TB
     classDef client fill:#881337,stroke:#f43f5e,color:#fff
@@ -7,18 +7,18 @@ flowchart TB
     classDef tool fill:#064e3b,stroke:#10b981,color:#d1fae5
     classDef pipe fill:#1e293b,stroke:#64748b,color:#f1f5f9
 
-    subgraph HARNESS["Architecture multi-agents ZAYNB — serveur local"]
+    subgraph HARNESS["GermlineIQ multi-agent architecture — local server"]
         direction TB
 
-        subgraph CLIENT["① Couche Client"]
+        subgraph CLIENT["① Client layer"]
             UI["Interface / API / assistant"]:::client
         end
 
-        subgraph HOST["② Orchestrateur"]
-            MASTER["Graphe LangGraph<br/>planifier → exécuter"]:::host
+        subgraph HOST["② Orchestrator"]
+            MASTER["LangGraph graph<br/>plan → execute"]:::host
         end
 
-        subgraph AGENTS["③ Couche Agents"]
+        subgraph AGENTS["③ Agent layer"]
             direction LR
             AG1["DataManager"]:::agent
             AG2["VariantCalling"]:::agent
@@ -28,25 +28,25 @@ flowchart TB
             AG6["ReportGenerator"]:::agent
         end
 
-        subgraph TOOLS["④ Couche Outils"]
+        subgraph TOOLS["④ Tool layer"]
             direction TB
-            T1["Stockage local"]:::tool
+            T1["Local storage"]:::tool
             T2["Parabricks / GATK4"]:::tool
             T3["ClinVar"]:::tool
-            T4["QC clinique"]:::tool
-            T5["Règles + BioGPT"]:::tool
-            T6["Rapport JSON"]:::tool
+            T4["Clinical QC + statistics"]:::tool
+            T5["Rules + verified BioGPT"]:::tool
+            T6["JSON report"]:::tool
         end
     end
 
-    UI -->|"1. [Intention: analyser un patient]<br/>Flux: {patient_id, fastq_r1, fastq_r2}"| MASTER
-    MASTER -->|"2. [Plan: FASTQ fournis]<br/>Flux: {fastq_r1, fastq_r2}"| AG1
-    AG1 -->|"3. [FASTQ validés, appel de variants]<br/>Flux: {fastq_r1_uri, fastq_r2_uri}"| AG2
-    AG2 -->|"4. [VCF filtré sur le panel]<br/>Flux: {vcf_uri}"| AG3
-    AG3 -->|"5. [Allèles annotés ClinVar]<br/>Flux: {annotated_variants_path}"| AG4
-    AG4 -->|"6. [Variants classés]<br/>Flux: {panel_analysis}"| AG5
-    AG5 -->|"7. [Risque déterminé]<br/>Flux: {risk_level, rationale}"| AG6
-    AG6 -.->|"8. [Objectif atteint, fin du plan]<br/>Flux: {clinical_report, report_uri}"| MASTER
+    UI -->|"1. [Intent: analyse a patient]<br/>Flow: {patient_id, fastq_r1, fastq_r2}"| MASTER
+    MASTER -->|"2. [Plan: FASTQ provided]<br/>Flow: {fastq_r1, fastq_r2}"| AG1
+    AG1 -->|"3. [FASTQ validated, variant calling]<br/>Flow: {fastq_r1_uri, fastq_r2_uri}"| AG2
+    AG2 -->|"4. [VCF filtered on the panel]<br/>Flow: {vcf_uri, alignment_qc}"| AG3
+    AG3 -->|"5. [ClinVar-annotated alleles]<br/>Flow: {annotated_variants_path}"| AG4
+    AG4 -->|"6. [Classified variants]<br/>Flow: {panel_analysis, vcf_statistics}"| AG5
+    AG5 -->|"7. [Risk determined]<br/>Flow: {risk_level, rationale}"| AG6
+    AG6 -.->|"8. [Goal reached, end of plan]<br/>Flow: {clinical_report, report_uri}"| MASTER
 
     AG1 --> T1
     AG2 --> T2
@@ -66,36 +66,36 @@ export type ArchWorkflowStep = {
   delegation: NodePair;
   tool?: NodePair;
   toolName?: string;
-  /** Agent exécuté une seule fois (fine-tuning LoRA optionnel) */
+  /** Agent run only once (optional LoRA fine-tuning) */
   oneShot?: boolean;
   oneShotNode?: string;
-  /** Retour rapport validé par l'orchestrateur avant livraison client */
+  /** Report returned and validated by the orchestrator before delivery */
   orchestratorValidation?: boolean;
   validationNode?: string;
 };
 
-/** Étapes du workflow — délégation + exécution tool externe */
+/** Workflow steps — delegation + external tool execution */
 export const ARCH_WORKFLOW: ArchWorkflowStep[] = [
   {
     id: 1,
     agent: 'Client UI',
-    title: 'Intention — analyser un patient',
+    title: 'Intent — analyse a patient',
     payload: '{patient_id, fastq_r1, fastq_r2}',
     delegation: ['UI', 'MASTER'],
   },
   {
     id: 2,
     agent: 'DataManager',
-    title: 'Validation et rangement des FASTQ',
+    title: 'FASTQ validation and storage',
     payload: '{fastq_r1, fastq_r2}',
     delegation: ['MASTER', 'AG1'],
     tool: ['AG1', 'T1'],
-    toolName: 'Stockage local',
+    toolName: 'Local storage',
   },
   {
     id: 3,
     agent: 'VariantCalling',
-    title: 'FASTQ → VCF filtré (panel, hg38)',
+    title: 'FASTQ → filtered VCF (panel, hg38)',
     payload: '{fastq_r1_uri, fastq_r2_uri}',
     delegation: ['AG1', 'AG2'],
     tool: ['AG2', 'T2'],
@@ -104,7 +104,7 @@ export const ARCH_WORKFLOW: ArchWorkflowStep[] = [
   {
     id: 4,
     agent: 'VariantAnnotation',
-    title: 'Annotation ClinVar',
+    title: 'ClinVar annotation',
     payload: '{vcf_uri}',
     delegation: ['AG2', 'AG3'],
     tool: ['AG3', 'T3'],
@@ -113,34 +113,34 @@ export const ARCH_WORKFLOW: ArchWorkflowStep[] = [
   {
     id: 5,
     agent: 'VCFAnalysis',
-    title: 'Contrôle qualité et classification',
+    title: 'Quality control and classification',
     payload: '{annotated_variants_path}',
     delegation: ['AG3', 'AG4'],
     tool: ['AG4', 'T4'],
-    toolName: 'QC clinique',
+    toolName: 'Clinical QC + statistics',
   },
   {
     id: 6,
     agent: 'Prediction',
-    title: 'Niveau de risque (règles) + commentaire BioGPT',
+    title: 'Risk level (rules) + verified BioGPT commentary',
     payload: '{panel_analysis}',
     delegation: ['AG4', 'AG5'],
     tool: ['AG5', 'T5'],
-    toolName: 'Règles + BioGPT',
+    toolName: 'Rules + verified BioGPT',
   },
   {
     id: 7,
     agent: 'ReportGenerator',
-    title: 'Rapport clinique reproductible',
+    title: 'Reproducible clinical report',
     payload: '{risk_level, rationale}',
     delegation: ['AG5', 'AG6'],
     tool: ['AG6', 'T6'],
-    toolName: 'Rapport JSON',
+    toolName: 'JSON report',
   },
   {
     id: 8,
-    agent: 'Orchestrateur',
-    title: 'Objectif atteint — fin du plan et retour client',
+    agent: 'Orchestrator',
+    title: 'Goal reached — end of plan, result returned',
     payload: '{clinical_report, report_uri}',
     delegation: ['AG6', 'MASTER'],
     orchestratorValidation: true,

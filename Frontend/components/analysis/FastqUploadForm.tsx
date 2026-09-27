@@ -41,7 +41,7 @@ export default function FastqUploadForm({
   const assignFiles = useCallback((files: FileList | File[]) => {
     const list = Array.from(files).filter(isFastqFile);
     if (!list.length) {
-      setError('Sélectionnez des fichiers FASTQ (.fastq.gz, .fq.gz, .fastq, .fq).');
+      setError('Select FASTQ files (.fastq.gz, .fq.gz, .fastq, .fq).');
       return;
     }
     setError(null);
@@ -68,7 +68,7 @@ export default function FastqUploadForm({
       return 'Extensions FASTQ invalides.';
     }
     if (r1.name === r2.name && r1.size === r2.size) {
-      return 'R1 et R2 doivent être des fichiers distincts.';
+      return 'R1 and R2 must be different files.';
     }
     return null;
   };
@@ -90,7 +90,7 @@ export default function FastqUploadForm({
       );
       onJobStarted(res.job_id, res.patient_id);
     } catch {
-      setError('Échec upload ou lancement. Vérifiez la taille des fichiers et l\'API.');
+      setError('Upload or start failed. Check the file sizes and the API.');
     } finally {
       setLoading(false);
     }
@@ -100,11 +100,11 @@ export default function FastqUploadForm({
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card dark:border-slate-800 dark:bg-slate-900 dark:shadow-card-dark sm:p-8">
       <div className="mb-6">
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-          Upload FASTQ direct
+          Upload FASTQ files
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Glissez vos fichiers paired-end — enregistrement sur le serveur puis lancement du workflow
-          multi-agents.
+          Drop your paired-end files — they are stored on the server, then the multi-agent workflow
+          starts.
         </p>
       </div>
 
@@ -141,7 +141,7 @@ export default function FastqUploadForm({
         >
           <Upload className="mx-auto h-10 w-10 text-dna-500" />
           <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-            Déposez vos FASTQ ici (R1 + R2)
+            Drop your FASTQ files here (R1 + R2)
           </p>
           <p className="mt-1 text-xs text-slate-500">.fastq.gz · .fq.gz · .fastq · .fq</p>
           <button
@@ -150,7 +150,7 @@ export default function FastqUploadForm({
             disabled={disabled || loading}
             className="mt-4 text-sm font-semibold text-dna-600 hover:text-dna-500 dark:text-dna-400"
           >
-            Parcourir les fichiers
+            Browse files
           </button>
           <input
             ref={inputRef}
@@ -170,7 +170,7 @@ export default function FastqUploadForm({
         {loading && uploadPct > 0 && (
           <div>
             <div className="mb-1 flex justify-between text-xs text-slate-500">
-              <span>Upload vers l&apos;API</span>
+              <span>Uploading to the API</span>
               <span className="font-mono">{uploadPct}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
@@ -196,12 +196,12 @@ export default function FastqUploadForm({
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Upload &amp; lancement…
+              Uploading &amp; starting…
             </>
           ) : (
             <>
               <Play className="h-4 w-4" />
-              Lancer le workflow
+              Run workflow
             </>
           )}
         </button>

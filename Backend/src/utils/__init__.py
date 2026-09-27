@@ -1,1 +1,1 @@
-"""Utilitaires : gestion GPU/VRAM et validation des fichiers d'entrée."""
+"""Utilities: GPU/VRAM management and input file validation."""

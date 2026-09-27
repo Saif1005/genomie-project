@@ -1,4 +1,4 @@
-"""API de bout en bout : VCF → annotation → analyse → risque → rapport (agents et moteur réels)."""
+"""End-to-end API: VCF → annotation → analysis → risk → report (real agents and engine)."""
 
 import json
 import shutil
@@ -38,7 +38,7 @@ def wait(job_id: str, timeout: float = 60) -> dict:
         if job["status"] in ("completed", "failed"):
             return job
         time.sleep(0.05)
-    raise AssertionError(f"job {job_id} non terminé")
+    raise AssertionError(f"job {job_id} not finished")
 
 
 def run_vcf(root, patient, fixture):
@@ -69,7 +69,7 @@ def test_brca1_vcf_gives_high_risk_report(data_root):
     report = client.get(f"/api/v1/jobs/{job['job_id']}/report").json()
     pred = report["clinical_prediction"]
     assert pred["risk_level"] == "HIGH"
-    assert pred["decision_method"] == "zaynb-rules-v1"
+    assert pred["decision_method"] == "germlineiq-rules-v1.1"
     assert "BRCA1" in pred["clinical_summary"] and "rs80357906" in pred["clinical_summary"]
     variant = report["genomic_findings"]["pathogenic_variants_detected"][0]
     assert variant["gatk_metrics"] == {"QUAL": 812.6, "DP": 42, "VAF": 0.476}
@@ -155,12 +155,12 @@ def test_job_state_survives_restart(data_root):
     running = store.create("P8", "vcf", [])
     store.update(running, status="running")
     reloaded = JobStore(data_root / "tmp" / "jobs").get(running)
-    assert reloaded["status"] == "failed" and "redémarrage" in reloaded["error"]
+    assert reloaded["status"] == "failed" and "restart" in reloaded["error"]
     assert json.loads((data_root / "tmp" / "jobs" / f"{running}.json").read_text())["status"] == "failed"
 
 
 def test_smoke_vcf_of_the_deployment_scripts(tmp_path, monkeypatch):
-    """Même VCF que scripts/smoke_test.sh, sans base ClinVar locale (annotation embarquée)."""
+    """Same VCF as scripts/smoke_test.sh, without a local ClinVar release (embedded annotation)."""
     root = tmp_path / "data"
     monkeypatch.setenv("CLINVAR_VCF", str(root / "absent.vcf.gz"))
     smoke = Path(__file__).resolve().parents[3] / "scripts" / "testdata" / "smoke_brca.vcf"
